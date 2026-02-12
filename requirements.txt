@@ -1,6 +1,2 @@
 streamlit 
-json
-hashlib
-os
-datetime
-re
+pytest
