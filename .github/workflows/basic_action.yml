@@ -5,8 +5,7 @@ on:
     branches: ["main"]
     # Triggers if Python files change OR if files in these specific folders change
     paths:
-      - 'Design Decisions/**'
-      - 'Requirements/**'
+      - 'docs/**'
       - '**.py'
   pull_request:
     branches: ["main"]
