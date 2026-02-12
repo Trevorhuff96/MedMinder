@@ -3,11 +3,11 @@ name: CI and Folder Notifications
 on:
   push:
     branches: ["main"]
-    # This filter ensures the "notify" job only runs when this folder changes
+    # Triggers if Python files change OR if files in these specific folders change
     paths:
       - 'Design Decisions/**'
       - 'Requirements/**'
-      - '**.py' # Included so tests run on python changes
+      - '**.py'
   pull_request:
     branches: ["main"]
   workflow_dispatch:
@@ -34,21 +34,22 @@ jobs:
         run: pytest
 
   # Job 2: Create the notification Issue
-  # This only runs on 'push' and only if files in your directory changed
   notify:
     runs-on: ubuntu-latest
-    #needs: test # Optional: Only notifies if tests pass first
+    # Optional: uncomment 'needs: test' if you only want an issue if tests pass
+    # needs: test 
     if: github.event_name == 'push'
     permissions:
       issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Create Notification Issue
-        uses: imjohnbo/issue-action@v3
-        with:
-          labels: "notification"
-          title: "New file activity in tracked directory"
-          body: |
-            New activity detected in your tracked directory by @${{ github.actor }}.
+      - name: Create Notification Issue via GitHub CLI
+        run: |
+          gh issue create \
+            --title "New file activity in tracked directory" \
+            --label "notification" \
+            --body "New activity detected in your tracked directory (Design Decisions or Requirements) by @${{ github.actor }}.
             
             **Commit Details:** ${{ github.sha }}
-            **Compare Changes:** ${{ github.event.compare }}
+            **Compare Changes:** ${{ github.event.compare }}"
