@@ -1,5 +1,5 @@
 import pytest
-from streamlit_app import is_valid_email, create_user
+from streamlit_app import is_valid_email
 
 def test_valid_email():
     assert is_valid_email("test@example.com")
