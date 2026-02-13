@@ -45,7 +45,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Create Notification Issue via GitHub CLI
         run: |
           gh issue create \
