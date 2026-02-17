@@ -1,5 +1,5 @@
 import pytest
-from streamlit_app import is_valid_email
+from auth import is_valid_email
 import os
 import glob
 
