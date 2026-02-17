@@ -50,7 +50,6 @@ jobs:
         run: |
           gh issue create \
             --title "New file activity in tracked directory" \
-            --label "notification" \
             --body "New activity detected in your tracked directory (Design Decisions or Requirements) by @${{ github.actor }}.
             
             **Commit Details:** ${{ github.sha }}
