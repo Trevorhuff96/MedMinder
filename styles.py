@@ -457,6 +457,7 @@ def load_custom_styles():
         .logout-button>button:hover {
             box-shadow: 0 5px 20px rgba(220, 53, 69, 0.4) !important;
         }
+
         
         /* Reduce default Streamlit bottom padding */
         .block-container {

@@ -2,8 +2,64 @@
 Page components for the MedMinder app
 """
 
+from datetime import date, timedelta
+
 import streamlit as st
 from auth import authenticate_user, create_user
+
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
+    "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia",
+    "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
+    "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota",
+    "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
+    "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont",
+    "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
+]
+
+COUNTRIES = [
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola",
+    "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
+    "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus",
+    "Belgium", "Belize", "Benin", "Bhutan", "Bolivia",
+    "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria",
+    "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon",
+    "Canada", "Central African Republic", "Chad", "Chile", "China",
+    "Colombia", "Comoros", "Congo", "Costa Rica", "Cote d'Ivoire",
+    "Croatia", "Cuba", "Cyprus", "Czech Republic", "Democratic Republic of the Congo",
+    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador",
+    "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia",
+    "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon",
+    "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada",
+    "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras",
+    "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland",
+    "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya",
+    "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon",
+    "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+    "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta",
+    "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia",
+    "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique",
+    "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand",
+    "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+    "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay",
+    "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia",
+    "Rwanda", "Saint Kitts and Nevis", "Saint Lucia",
+    "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe",
+    "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore",
+    "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
+    "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname",
+    "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania",
+    "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia",
+    "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine",
+    "United Arab Emirates", "United Kingdom", "United States", "Uruguay",
+    "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen",
+    "Zambia", "Zimbabwe"
+]
+
+DOB_MAX_DATE = date.today()
+DOB_MIN_DATE = DOB_MAX_DATE - timedelta(days=365 * 100)
 
 def landing_page():
     """Display the modern landing page with hero section"""
@@ -93,6 +149,7 @@ def auth_page():
         st.markdown('<div class="auth-back">', unsafe_allow_html=True)
         if st.button("← Back", key="back_button"):
             st.session_state.show_auth = False
+            st.session_state.show_signup = False
             if "role" in st.session_state:
                 del st.session_state.role
             st.rerun()
@@ -107,20 +164,31 @@ def auth_page():
                 st.markdown("<h3 class='auth-section-title'>Doctor Onboarding</h3>", unsafe_allow_html=True)
                 first_name = st.text_input("First Name", placeholder="Enter your first name")
                 last_name = st.text_input("Last Name", placeholder="Enter your last name")
-                dob = st.date_input("Date of Birth")
+                dob = st.date_input(
+                    "Date of Birth",
+                    min_value=DOB_MIN_DATE,
+                    max_value=DOB_MAX_DATE,
+                    format="DD/MM/YYYY",
+                    help="DD/MM/YYYY",
+                )
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Office Location</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
                 line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
                 city = st.text_input("City", placeholder="Enter city")
-                state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
+                state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
                 zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
-                country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
+                country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
 
                 st.markdown("<h4 class='auth-subtitle'>Professional Details</h4>", unsafe_allow_html=True)
                 phone = st.text_input("Phone", placeholder="Enter phone number")
-                speciality = st.selectbox("Speciality", ["Cardiologist", "Dentist", "Neurologist", "Pediatrician", "General Practitioner"], index=0)
+                speciality = st.selectbox(
+                    "Speciality",
+                    ["Cardiologist", "Dentist", "Neurologist", "Pediatrician", "General Practitioner"],
+                    index=None,
+                    placeholder="Select your specialty",
+                )
                 off_day = st.radio("Off Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
                 office_hours = st.radio("Office Hours", ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"])
 
@@ -155,16 +223,22 @@ def auth_page():
                 st.markdown("<h3 class='auth-section-title'>Patient Onboarding</h3>", unsafe_allow_html=True)
                 first_name = st.text_input("First Name", placeholder="Enter your first name")
                 last_name = st.text_input("Last Name", placeholder="Enter your last name")
-                dob = st.date_input("Date of Birth")
+                dob = st.date_input(
+                    "Date of Birth",
+                    min_value=DOB_MIN_DATE,
+                    max_value=DOB_MAX_DATE,
+                    format="DD/MM/YYYY",
+                    help="DD/MM/YYYY",
+                )
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Address</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
                 line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
                 city = st.text_input("City", placeholder="Enter city")
-                state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
+                state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
                 zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
-                country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
+                country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
                 phone = st.text_input("Phone", placeholder="Enter phone number")
 
                 st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
@@ -194,10 +268,13 @@ def auth_page():
     # ------------------ SIGN IN & SIGN UP TABS ------------------
     # If no role is selected, show the standard tabs
     else:
-        tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
+        tabs = ["Sign In", "Sign Up"]
+        if st.session_state.get("show_signup"):
+            tabs = ["Sign Up", "Sign In"]
 
-        # Sign In Tab
-        with tab1:
+        tab1, tab2 = st.tabs(tabs)
+
+        def render_signin():
             st.markdown("<br>", unsafe_allow_html=True)
             with st.form("signin_form"):
                 st.subheader("Sign In to Your Account")
@@ -212,16 +289,16 @@ def auth_page():
                         success, result = authenticate_user(email, password)
                         if success:
                             st.session_state.logged_in = True
-                            st.session_state.user_name = result["name"] 
-                            st.session_state.user_role = result["role"] 
+                            st.session_state.user_name = result["name"]
+                            st.session_state.user_role = result["role"]
                             st.session_state.user_email = email
+                            st.session_state.show_signup = False
                             st.success(f"Login successful! Welcome, {result['name']}.")
                             st.rerun()
                         else:
                             st.error(result)
 
-        # Sign Up Tab
-        with tab2:
+        def render_signup():
             st.markdown("<br>", unsafe_allow_html=True)
             st.subheader("Select Your Role")
             st.markdown("<br>", unsafe_allow_html=True)
@@ -235,6 +312,17 @@ def auth_page():
                 if st.button("Patient", key="patient_button", use_container_width=True):
                     st.session_state.role = "Patient"
                     st.rerun()
+
+        if st.session_state.get("show_signup"):
+            with tab1:
+                render_signup()
+            with tab2:
+                render_signin()
+        else:
+            with tab1:
+                render_signin()
+            with tab2:
+                render_signup()
 
 
     st.markdown('</div>', unsafe_allow_html=True)

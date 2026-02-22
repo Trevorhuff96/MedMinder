@@ -23,6 +23,8 @@ def run_app():
         st.session_state.user_role = None
     if 'show_auth' not in st.session_state:
         st.session_state.show_auth = False
+    if 'show_signup' not in st.session_state:
+        st.session_state.show_signup = False
 
     # Main App Logic - Route to appropriate page
     if st.session_state.logged_in:
