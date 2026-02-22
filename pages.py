@@ -84,16 +84,19 @@ def landing_page():
 def auth_page():
     """Display the authentication page with Sign In and Sign Up tabs"""
 
-    st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🔐 Welcome to MedMinder</h1>", unsafe_allow_html=True)
+    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
+    st.markdown("<h1 class='auth-title'>🔐 Welcome to MedMinder</h1>", unsafe_allow_html=True)
 
     # Back to landing page button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
-        if st.button("← Back", key="back_button", use_container_width=True):
+        st.markdown('<div class="auth-back">', unsafe_allow_html=True)
+        if st.button("← Back", key="back_button"):
             st.session_state.show_auth = False
             if "role" in st.session_state:
                 del st.session_state.role
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------ ONBOARDING FORMS ------------------
     # If a role has been selected, hide the tabs and show the full form
@@ -101,36 +104,30 @@ def auth_page():
         
         if st.session_state.role == "Doctor":
             with st.form("doctor_onboarding_form"):
-                st.markdown("<h3 style='color: #4CAF50;'>Doctor Onboarding</h3>", unsafe_allow_html=True)
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    first_name = st.text_input("First Name", placeholder="Enter your first name")
-                with col2:
-                    last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                st.markdown("<h3 class='auth-section-title'>Doctor Onboarding</h3>", unsafe_allow_html=True)
+                first_name = st.text_input("First Name", placeholder="Enter your first name")
+                last_name = st.text_input("Last Name", placeholder="Enter your last name")
                 dob = st.date_input("Date of Birth")
-                gender = st.radio("Gender", ["Male", "Female", "Other"], horizontal=True)
+                gender = st.radio("Gender", ["Male", "Female", "Other"])
 
-                st.markdown("<h4 style='color: #4CAF50;'>Office Location</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='auth-subtitle'>Office Location</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
                 line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    city = st.text_input("City", placeholder="Enter city")
-                    state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
-                with col2:
-                    zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
-                    country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
+                city = st.text_input("City", placeholder="Enter city")
+                state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
+                zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
 
-                st.markdown("<h4 style='color: #4CAF50;'>Professional Details</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='auth-subtitle'>Professional Details</h4>", unsafe_allow_html=True)
                 phone = st.text_input("Phone", placeholder="Enter phone number")
                 speciality = st.selectbox("Speciality", ["Cardiologist", "Dentist", "Neurologist", "Pediatrician", "General Practitioner"], index=0)
-                off_day = st.radio("Off Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], horizontal=True)
-                office_hours = st.radio("Office Hours", ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"], horizontal=True)
+                off_day = st.radio("Off Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+                office_hours = st.radio("Office Hours", ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"])
 
-                st.markdown("<h4 style='color: #4CAF50;'>Account Details</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
                 email = st.text_input("Email", placeholder="Enter your email")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
-                submit = st.form_submit_button("Sign Up", use_container_width=True)
+                submit = st.form_submit_button("Sign Up")
 
                 if submit:
                     address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
@@ -155,31 +152,25 @@ def auth_page():
 
         elif st.session_state.role == "Patient":
             with st.form("patient_onboarding_form"):
-                st.markdown("<h3 style='color: #4CAF50;'>Patient Onboarding</h3>", unsafe_allow_html=True)
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    first_name = st.text_input("First Name", placeholder="Enter your first name")
-                with col2:
-                    last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                st.markdown("<h3 class='auth-section-title'>Patient Onboarding</h3>", unsafe_allow_html=True)
+                first_name = st.text_input("First Name", placeholder="Enter your first name")
+                last_name = st.text_input("Last Name", placeholder="Enter your last name")
                 dob = st.date_input("Date of Birth")
-                gender = st.radio("Gender", ["Male", "Female", "Other"], horizontal=True)
+                gender = st.radio("Gender", ["Male", "Female", "Other"])
 
-                st.markdown("<h4 style='color: #4CAF50;'>Address</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='auth-subtitle'>Address</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
                 line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    city = st.text_input("City", placeholder="Enter city")
-                    state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
-                with col2:
-                    zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
-                    country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
+                city = st.text_input("City", placeholder="Enter city")
+                state = st.selectbox("State", ["State 1", "State 2", "State 3"], index=0)
+                zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                country = st.selectbox("Country", ["Country 1", "Country 2", "Country 3"], index=0)
                 phone = st.text_input("Phone", placeholder="Enter phone number")
 
-                st.markdown("<h4 style='color: #4CAF50;'>Account Details</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
                 email = st.text_input("Email", placeholder="Enter your email")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
-                submit = st.form_submit_button("Sign Up", use_container_width=True)
+                submit = st.form_submit_button("Sign Up")
 
                 if submit:
                     address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
@@ -212,7 +203,7 @@ def auth_page():
                 st.subheader("Sign In to Your Account")
                 email = st.text_input("Email", placeholder="Enter your email")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
-                submit = st.form_submit_button("Sign In", use_container_width=True)
+                submit = st.form_submit_button("Sign In")
 
                 if submit:
                     if not email or not password:
@@ -232,8 +223,8 @@ def auth_page():
         # Sign Up Tab
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("<h3 style='color: #4CAF50; text-align: center; background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>Select Your Role</h3>", unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)  
+            st.subheader("Select Your Role")
+            st.markdown("<br>", unsafe_allow_html=True)
 
             col1, col2 = st.columns(2)
             with col1:
@@ -244,6 +235,9 @@ def auth_page():
                 if st.button("Patient", key="patient_button", use_container_width=True):
                     st.session_state.role = "Patient"
                     st.rerun()
+
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
