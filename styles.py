@@ -792,6 +792,34 @@ def load_custom_styles():
             text-decoration: none !important;
         }
 
+        .prescription-toast {
+            position: fixed;
+            left: 20px;
+            bottom: 22px;
+            z-index: 1200;
+            max-width: 380px;
+            padding: 0.72rem 0.95rem;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #00bfa5 0%, #00897b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 14px 30px rgba(0, 121, 107, 0.35);
+            animation: toast-slide-in 0.22s ease-out;
+        }
+
+        @keyframes toast-slide-in {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         button[id*="pat_logout"],
         button[id*="doc_logout"] {
             background: linear-gradient(135deg, #ff8a65 0%, #ef5350 55%, #d84315 100%) !important;

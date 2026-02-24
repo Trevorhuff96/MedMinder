@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 from auth import authenticate_user, create_user
+from prescription import save_prescription
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
 
@@ -332,6 +333,12 @@ def auth_page():
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
     load_custom_styles()
+    saved_notice = st.session_state.pop("prescription_saved_notice", None)
+    if saved_notice:
+        st.markdown(
+            f"<div class='prescription-toast'>{saved_notice}</div>",
+            unsafe_allow_html=True,
+        )
 
     header_col, logout_col = st.columns([6, 1.4])
     with header_col:
@@ -530,10 +537,23 @@ def prescription_page():
             if not valid_medicines:
                 st.error("Please add at least one medicine name before saving.")
             else:
-                st.success(f"Prescription saved for {patient_name}.")
-                st.caption(f"Diagnosis: {diagnosis or 'Not specified'} | Follow-up: {follow_up_days} days")
-                if general_notes.strip():
-                    st.caption(f"Notes: {general_notes}")
+                success, message, prescription_id = save_prescription(
+                    patient_name=patient_name,
+                    doctor_email=st.session_state.get("user_email", ""),
+                    diagnosis=diagnosis,
+                    follow_up_days=follow_up_days,
+                    general_notes=general_notes,
+                    medicines=medicine_entries,
+                )
+
+                if success:
+                    st.session_state.prescription_saved_notice = (
+                        f"Prescription saved for {patient_name}."
+                    )
+                    st.session_state.show_prescription = False
+                    st.rerun()
+                else:
+                    st.error(message)
 
     if st.button("← Back to Doctor Dashboard", key="back_to_doctor"):
         st.session_state.show_prescription = False
