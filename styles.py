@@ -570,6 +570,60 @@ def load_custom_styles():
             font-size: 0.9rem;
             margin-bottom: 0;
         }
+
+        .doctor-rx-subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.93rem;
+            margin-bottom: 0.55rem;
+        }
+
+        .doctor-rx-card {
+            background: #f7faff;
+            border: 1px solid #d9e6ff !important;
+            border-radius: 12px;
+            padding: 0.62rem 0.8rem;
+            margin-bottom: 0.55rem;
+            box-shadow: 0 6px 16px rgba(26, 35, 126, 0.12);
+        }
+
+        .doctor-rx-name {
+            color: #1a237e;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 0.12rem;
+        }
+
+        .doctor-rx-note {
+            color: #4f5b7a;
+            font-size: 0.82rem;
+            margin-bottom: 0;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"] {
+            background: linear-gradient(135deg, #42a5f5 0%, #1e88e5 55%, #1565c0 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.24) !important;
+            border-radius: 10px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.01em;
+            min-width: 132px !important;
+            padding: 0.62rem 0.95rem !important;
+            font-size: 0.9rem !important;
+            box-shadow: 0 8px 20px rgba(21, 101, 192, 0.32) !important;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"]:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            background: linear-gradient(135deg, #64b5f6 0%, #2196f3 55%, #1976d2 100%) !important;
+            box-shadow: 0 12px 24px rgba(21, 101, 192, 0.38) !important;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"]:focus,
+        div[data-testid="stButton"] > button[id*="prescribe_"]:focus-visible {
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.22), 0 8px 20px rgba(21, 101, 192, 0.32) !important;
+        }
         
         /* Form Styling */
         div[data-testid="stForm"] {

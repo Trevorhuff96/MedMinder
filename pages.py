@@ -402,7 +402,30 @@ def doctor_dashboard_page():
         
     with tab3:
         st.subheader("Manage Prescriptions")
-        st.info("UI for writing and renewing prescriptions will go here.")
+        st.markdown("<p class='doctor-rx-subtitle'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
+        dummy_patients = [
+            {"name": "Ethan Carter", "note": "Hypertension follow-up"},
+            {"name": "Sophia Bennett", "note": "Diabetes management"},
+            {"name": "Liam Brooks", "note": "Post-op medication review"},
+            {"name": "Olivia Hayes", "note": "Migraine treatment plan"},
+            {"name": "Noah Turner", "note": "Asthma refill request"},
+        ]
+
+        for idx, patient in enumerate(dummy_patients):
+            name_col, action_col = st.columns([3.6, 1.4])
+            with name_col:
+                st.markdown(
+                    f"""
+                    <div class="doctor-rx-card">
+                        <p class="doctor-rx-name">{patient["name"]}</p>
+                        <p class="doctor-rx-note">{patient["note"]}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with action_col:
+                if st.button("Prescribe", key=f"prescribe_{idx}", use_container_width=True):
+                    st.success(f"Prescription flow opened for {patient['name']}.")
 
 
 def patient_dashboard_page():
