@@ -228,3 +228,31 @@ def authenticate_user(email, password):
         "role": stored_role
     }
     return True, user_info
+
+
+def get_all_patients():
+    """
+    Fetch all registered patients for doctor-side listing.
+
+    Returns:
+        list[dict]: [{patient_id, name, email}, ...]
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT p.patient_id, u.name, u.email
+        FROM patients p
+        JOIN users u ON u.email = p.email
+        WHERE u.role = 'Patient'
+        ORDER BY u.name ASC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {"patient_id": row[0], "name": row[1], "email": row[2]}
+        for row in rows
+    ]

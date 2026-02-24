@@ -5,7 +5,7 @@ Page components for the MedMinder app
 from datetime import date, timedelta
 
 import streamlit as st
-from auth import authenticate_user, create_user
+from auth import authenticate_user, create_user, get_all_patients
 from prescription import save_prescription
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
@@ -545,31 +545,29 @@ def doctor_dashboard_page():
     with tab3:
         st.subheader("Manage Prescriptions")
         st.markdown("<p class='doctor-rx-subtitle'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
-        dummy_patients = [
-            {"name": "Ethan Carter", "note": "Hypertension follow-up"},
-            {"name": "Sophia Bennett", "note": "Diabetes management"},
-            {"name": "Liam Brooks", "note": "Post-op medication review"},
-            {"name": "Olivia Hayes", "note": "Migraine treatment plan"},
-            {"name": "Noah Turner", "note": "Asthma refill request"},
-        ]
+        patient_rows = get_all_patients()
 
-        for idx, patient in enumerate(dummy_patients):
-            name_col, action_col = st.columns([3.6, 1.4])
-            with name_col:
-                st.markdown(
-                    f"""
-                    <div class="doctor-rx-card">
-                        <p class="doctor-rx-name">{patient["name"]}</p>
-                        <p class="doctor-rx-note">{patient["note"]}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with action_col:
-                if st.button("Prescribe", key=f"prescribe_{idx}", use_container_width=True):
-                    st.session_state.show_prescription = True
-                    st.session_state.selected_patient = patient["name"]
-                    st.rerun()
+        if not patient_rows:
+            st.info("No patients found yet.")
+        else:
+            for idx, patient in enumerate(patient_rows):
+                name_col, action_col = st.columns([3.6, 1.4])
+                with name_col:
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card">
+                            <p class="doctor-rx-name">{patient["name"]}</p>
+                            <p class="doctor-rx-note">{patient["email"]}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with action_col:
+                    if st.button("Prescribe", key=f"prescribe_{idx}", use_container_width=True):
+                        st.session_state.show_prescription = True
+                        st.session_state.selected_patient = patient["name"]
+                        st.session_state.selected_patient_id = patient["patient_id"]
+                        st.rerun()
 
 
 def prescription_page():
@@ -674,6 +672,7 @@ def prescription_page():
             else:
                 success, message, prescription_id = save_prescription(
                     patient_name=patient_name,
+                    patient_id=st.session_state.get("selected_patient_id"),
                     doctor_email=st.session_state.get("user_email", ""),
                     diagnosis=diagnosis,
                     follow_up_days=follow_up_days,
@@ -686,12 +685,14 @@ def prescription_page():
                         f"Prescription saved for {patient_name}."
                     )
                     st.session_state.show_prescription = False
+                    st.session_state.selected_patient_id = None
                     st.rerun()
                 else:
                     st.error(message)
 
     if st.button("← Back to Doctor Dashboard", key="back_to_doctor"):
         st.session_state.show_prescription = False
+        st.session_state.selected_patient_id = None
         st.rerun()
 
 
