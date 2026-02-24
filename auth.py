@@ -9,6 +9,65 @@ from datetime import datetime
 
 DB_FILE = "medminder.db"
 
+def _column_exists(cursor, table_name, column_name):
+    """Check whether a column exists in a SQLite table."""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = cursor.fetchall()
+    return any(col[1] == column_name for col in columns)
+
+
+def _migrate_doctors_table(cursor):
+    """Migrate doctors table to use doctor_id primary key while preserving data."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS doctors_new (
+            doctor_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE REFERENCES users(email),
+            dob TEXT,
+            gender TEXT,
+            phone TEXT,
+            address TEXT,
+            speciality TEXT,
+            office_hours TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        INSERT INTO doctors_new (email, dob, gender, phone, address, speciality, office_hours)
+        SELECT email, dob, gender, phone, address, speciality, office_hours
+        FROM doctors
+        """
+    )
+    cursor.execute("DROP TABLE doctors")
+    cursor.execute("ALTER TABLE doctors_new RENAME TO doctors")
+
+
+def _migrate_patients_table(cursor):
+    """Migrate patients table to use patient_id primary key while preserving data."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS patients_new (
+            patient_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE REFERENCES users(email),
+            dob TEXT,
+            gender TEXT,
+            phone TEXT,
+            address TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        INSERT INTO patients_new (email, dob, gender, phone, address)
+        SELECT email, dob, gender, phone, address
+        FROM patients
+        """
+    )
+    cursor.execute("DROP TABLE patients")
+    cursor.execute("ALTER TABLE patients_new RENAME TO patients")
+
+
 def init_db():
     """Initialize the SQLite database with normalized tables for roles."""
     conn = sqlite3.connect(DB_FILE)
@@ -28,7 +87,8 @@ def init_db():
     # Doctor Profiles Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS doctors (
-            email TEXT PRIMARY KEY REFERENCES users(email),
+            doctor_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE REFERENCES users(email),
             dob TEXT,
             gender TEXT,
             phone TEXT,
@@ -41,13 +101,21 @@ def init_db():
     # Patient Profiles Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS patients (
-            email TEXT PRIMARY KEY REFERENCES users(email),
+            patient_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE REFERENCES users(email),
             dob TEXT,
             gender TEXT,
             phone TEXT,
             address TEXT
         )
     ''')
+
+    # Migrate old schemas (email-as-primary-key) to new id-based schemas
+    if not _column_exists(cursor, "doctors", "doctor_id"):
+        _migrate_doctors_table(cursor)
+    if not _column_exists(cursor, "patients", "patient_id"):
+        _migrate_patients_table(cursor)
+
     conn.commit()
     conn.close()
 
