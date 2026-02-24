@@ -6,7 +6,6 @@ on:
     # Triggers if Python files change OR if files in these specific folders change
     paths:
       - 'docs/**'
-      - '**.py'
   pull_request:
     branches: ["main"]
   workflow_dispatch:
