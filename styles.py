@@ -292,6 +292,18 @@ def load_custom_styles():
             line-height: 1.5;
             max-width: 500px;
         }
+
+        .hero-cta .stButton>button {
+            background: #0d47a1 !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25) !important;
+        }
+
+        .hero-cta .stButton>button:hover {
+            background: #0b3b86 !important;
+            transform: translateY(-1px);
+        }
         
         
         /* Card */
@@ -619,6 +631,17 @@ def load_custom_styles():
             color: #333 !important;
             background-color: white !important;
         }
+
+        /* Dark mode text input styling */
+        @media (prefers-color-scheme: dark) {
+            div[data-testid="stForm"] input,
+            div[data-testid="stForm"] textarea,
+            div[data-testid="stForm"] select,
+            .stTextInput>div[data-baseweb="input"]>input {
+                color: #ffffff !important;
+                -webkit-text-fill-color: #ffffff !important;
+            }
+        }
         
         .stButton>button {
             width: 100%;
@@ -667,34 +690,6 @@ def load_custom_styles():
             box-shadow: 0 5px 20px rgba(32, 178, 170, 0.4) !important;
         }
 
-        .stButton>button[aria-label="← Back"],
-        .stButton>button[aria-label="Back"],
-        .stButton>button[aria-label*="Back"],
-        div[data-testid="stButton"] > button[aria-label*="Back"],
-        button[title*="Back"],
-        button[aria-label*="Back"] {
-            width: auto !important;
-            min-width: 48px !important;
-            padding: 0.2rem 0.45rem !important;
-            background: #0d47a1 !important;
-            color: rgba(255, 255, 255, 0.9) !important;
-            font-size: 0.68rem !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            box-shadow: none !important;
-            line-height: 1 !important;
-        }
-
-        .stButton>button[aria-label="← Back"]:hover,
-        .stButton>button[aria-label="Back"]:hover,
-        .stButton>button[aria-label*="Back"]:hover,
-        div[data-testid="stButton"] > button[aria-label*="Back"]:hover,
-        button[title*="Back"]:hover,
-        button[aria-label*="Back"]:hover {
-            background: #0b3b86 !important;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-        
         .patient-top-logout {
             display: flex;
             justify-content: flex-end;

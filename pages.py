@@ -63,6 +63,51 @@ COUNTRIES = [
 DOB_MAX_DATE = date.today()
 DOB_MIN_DATE = DOB_MAX_DATE - timedelta(days=365 * 100)
 
+def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_code, 
+                           country, phone, email, password, speciality=None):
+    """
+    Validate signup form fields for both Doctor and Patient roles.
+    
+    Args:
+        Common fields for both roles, plus optional speciality for doctors
+    
+    Returns:
+        dict: Dictionary of field errors {field_name: error_message}
+    """
+    errors = {}
+    
+    # Common validations
+    if not first_name:
+        errors["first_name"] = "First Name is required."
+    if not last_name:
+        errors["last_name"] = "Last Name is required."
+    if dob is None:
+        errors["dob"] = "Date of Birth is required."
+    if not line1:
+        errors["line1"] = "Address Line 1 is required."
+    if not city:
+        errors["city"] = "City is required."
+    if state is None:
+        errors["state"] = "State is required."
+    if not zip_code:
+        errors["zip_code"] = "Zip Code is required."
+    if country is None:
+        errors["country"] = "Country is required."
+    if not phone:
+        errors["phone"] = "Phone is required."
+    if not email:
+        errors["email"] = "Email is required."
+    if not password:
+        errors["password"] = "Password is required."
+    elif len(password) < 6:
+        errors["password"] = "Password must be at least 6 characters."
+    
+    # Doctor-specific validation
+    if speciality is not None and speciality == "":
+        errors["speciality"] = "Speciality is required."
+    
+    return errors
+
 def landing_page():
     """Display the modern landing page with hero section"""
     
@@ -107,6 +152,7 @@ def landing_page():
         """, unsafe_allow_html=True)
         
         # Buttons - Side by side
+        st.markdown('<div class="hero-cta">', unsafe_allow_html=True)
         btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
         
         with btn_col1:
@@ -120,6 +166,8 @@ def landing_page():
                 st.session_state.show_auth = True
                 st.session_state.show_signup = True 
                 st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Right Column - Card with Icon
     with col2:
@@ -165,7 +213,9 @@ def auth_page():
             with st.form("doctor_onboarding_form"):
                 st.markdown("<h3 class='auth-section-title'>Doctor Onboarding</h3>", unsafe_allow_html=True)
                 first_name = st.text_input("First Name", placeholder="Enter your first name")
+                first_name_error = st.empty()
                 last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                last_name_error = st.empty()
                 dob = st.date_input(
                     "Date of Birth",
                     min_value=DOB_MIN_DATE,
@@ -173,33 +223,75 @@ def auth_page():
                     format="DD/MM/YYYY",
                     help="DD/MM/YYYY",
                 )
+                dob_error = st.empty()
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Office Location</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
-                line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
+                line1_error = st.empty()
+                line2 = st.text_input("Address Line 2 (optional)", placeholder="Enter address line 2")
                 city = st.text_input("City", placeholder="Enter city")
+                city_error = st.empty()
                 state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
+                state_error = st.empty()
                 zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                zip_code_error = st.empty()
                 country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
+                country_error = st.empty()
 
                 st.markdown("<h4 class='auth-subtitle'>Professional Details</h4>", unsafe_allow_html=True)
                 phone = st.text_input("Phone", placeholder="Enter phone number")
+                phone_error = st.empty()
                 speciality = st.selectbox(
                     "Speciality",
                     ["Cardiologist", "Dentist", "Neurologist", "Pediatrician", "General Practitioner"],
                     index=None,
                     placeholder="Select your specialty",
                 )
+                speciality_error = st.empty()
                 off_day = st.radio("Off Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
                 office_hours = st.radio("Office Hours", ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"])
 
                 st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
                 email = st.text_input("Email", placeholder="Enter your email")
+                email_error = st.empty()
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
+                password_error = st.empty()
                 submit = st.form_submit_button("Sign Up")
 
                 if submit:
+                    error_slots = {
+                        "first_name": first_name_error,
+                        "last_name": last_name_error,
+                        "dob": dob_error,
+                        "line1": line1_error,
+                        "city": city_error,
+                        "state": state_error,
+                        "zip_code": zip_code_error,
+                        "country": country_error,
+                        "phone": phone_error,
+                        "speciality": speciality_error,
+                        "email": email_error,
+                        "password": password_error,
+                    }
+                    
+                    # Validate all fields using helper function
+                    errors = validate_signup_fields(
+                        first_name, last_name, dob, line1, city, state, zip_code,
+                        country, phone, email, password, speciality=speciality
+                    )
+
+                    if errors:
+                        if len(errors) == 1:
+                            st.error(next(iter(errors.values())))
+                        else:
+                            st.error("There are missing required fields.")
+                            for key, message in errors.items():
+                                slot = error_slots.get(key)
+                                if slot is not None:
+                                    slot.error(message)
+                        return
+
                     address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
                     profile_data = {
                         "dob": str(dob), 
@@ -224,7 +316,9 @@ def auth_page():
             with st.form("patient_onboarding_form"):
                 st.markdown("<h3 class='auth-section-title'>Patient Onboarding</h3>", unsafe_allow_html=True)
                 first_name = st.text_input("First Name", placeholder="Enter your first name")
+                first_name_error = st.empty()
                 last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                last_name_error = st.empty()
                 dob = st.date_input(
                     "Date of Birth",
                     min_value=DOB_MIN_DATE,
@@ -232,23 +326,63 @@ def auth_page():
                     format="DD/MM/YYYY",
                     help="DD/MM/YYYY",
                 )
+                dob_error = st.empty()
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Address</h4>", unsafe_allow_html=True)
                 line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
-                line2 = st.text_input("Address Line 2", placeholder="Enter address line 2")
+                line1_error = st.empty()
+                line2 = st.text_input("Address Line 2 (optional)", placeholder="Enter address line 2")
                 city = st.text_input("City", placeholder="Enter city")
+                city_error = st.empty()
                 state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
+                state_error = st.empty()
                 zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                zip_code_error = st.empty()
                 country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
+                country_error = st.empty()
                 phone = st.text_input("Phone", placeholder="Enter phone number")
+                phone_error = st.empty()
 
                 st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
                 email = st.text_input("Email", placeholder="Enter your email")
+                email_error = st.empty()
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
+                password_error = st.empty()
                 submit = st.form_submit_button("Sign Up")
 
                 if submit:
+                    error_slots = {
+                        "first_name": first_name_error,
+                        "last_name": last_name_error,
+                        "dob": dob_error,
+                        "line1": line1_error,
+                        "city": city_error,
+                        "state": state_error,
+                        "zip_code": zip_code_error,
+                        "country": country_error,
+                        "phone": phone_error,
+                        "email": email_error,
+                        "password": password_error,
+                    }
+                    
+                    # Validate all fields using helper function
+                    errors = validate_signup_fields(
+                        first_name, last_name, dob, line1, city, state, zip_code,
+                        country, phone, email, password
+                    )
+
+                    if errors:
+                        if len(errors) == 1:
+                            st.error(next(iter(errors.values())))
+                        else:
+                            st.error("There are missing required fields.")
+                            for key, message in errors.items():
+                                slot = error_slots.get(key)
+                                if slot is not None:
+                                    slot.error(message)
+                        return
+
                     address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
                     profile_data = {
                         "dob": str(dob), 
