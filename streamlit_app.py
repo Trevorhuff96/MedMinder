@@ -54,6 +54,8 @@ def run_app():
         st.session_state.show_prescription = False
     if 'selected_patient' not in st.session_state:
         st.session_state.selected_patient = ""
+    if 'selected_patient_id' not in st.session_state:
+        st.session_state.selected_patient_id = None
 
     # Query-param logout hook for custom HTML logout controls
     logout_param = st.query_params.get("logout")
@@ -66,6 +68,7 @@ def run_app():
         st.session_state.show_signup = False
         st.session_state.show_prescription = False
         st.session_state.selected_patient = ""
+        st.session_state.selected_patient_id = None
         st.query_params.clear()
         st.rerun()
 
