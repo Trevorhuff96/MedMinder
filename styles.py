@@ -496,7 +496,9 @@ def load_custom_styles():
         }
 
         .patient-welcome,
-        .patient-account-role {
+        .patient-account-role,
+        .doctor-welcome,
+        .doctor-account-role {
             color: #ffffff !important;
         }
 

@@ -331,15 +331,61 @@ def auth_page():
 
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
-    st.markdown(f"# 🩺 Welcome, Dr. {st.session_state.user_name}!")
-    st.markdown(f"**Account:** {st.session_state.user_email} | **Role:** {st.session_state.user_role}")
+    load_custom_styles()
+
+    header_col, logout_col = st.columns([6, 1.4])
+    with header_col:
+        st.markdown(f"<h1 class='doctor-welcome'>🩺 Welcome back, Dr. {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
+    with logout_col:
+        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
+        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(f"<p class='doctor-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
     st.markdown("---")
     
-    # Mock Doctor Metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Patients", "142", "3 this week")
-    col2.metric("Today's Appointments", "8", "-2 cancellations")
-    col3.metric("Pending Refill Requests", "12", "Action required", delta_color="inverse")
+    # Doctor summary metrics
+    metrics = [
+        {
+            "icon": "👥",
+            "label": "Total Patients",
+            "value": "142",
+            "detail": "3 new this week",
+            "badge": "Active",
+        },
+        {
+            "icon": "📅",
+            "label": "Today's Appointments",
+            "value": "8",
+            "detail": "2 follow-ups pending",
+            "badge": "Today",
+        },
+        {
+            "icon": "💊",
+            "label": "Refill Requests",
+            "value": "12",
+            "detail": "Action required",
+            "badge": "Urgent",
+        },
+    ]
+
+    cols = st.columns(3)
+    for col, metric in zip(cols, metrics):
+        with col:
+            st.markdown(
+                f"""
+                <div class="patient-metric-card">
+                    <div class="patient-metric-head">
+                        <span class="patient-metric-icon">{metric["icon"]}</span>
+                        <span class="patient-metric-badge">{metric["badge"]}</span>
+                    </div>
+                    <p class="patient-metric-label">{metric["label"]}</p>
+                    <h3 class="patient-metric-value">{metric["value"]}</h3>
+                    <p class="patient-metric-detail">{metric["detail"]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -357,19 +403,6 @@ def doctor_dashboard_page():
     with tab3:
         st.subheader("Manage Prescriptions")
         st.info("UI for writing and renewing prescriptions will go here.")
-    
-    st.markdown("---")
-    
-    # Logout Logic
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("🚪 Logout", use_container_width=True, key="doc_logout"):
-            st.session_state.logged_in = False
-            st.session_state.user_name = ""
-            st.session_state.user_email = ""
-            st.session_state.user_role = None
-            st.session_state.show_auth = False
-            st.rerun()
 
 
 def patient_dashboard_page():
