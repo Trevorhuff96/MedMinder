@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 from auth import authenticate_user, create_user, get_all_patients
-from prescription import save_prescription
+from prescription import save_prescription, get_prescriptions_for_patient
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
 
@@ -628,7 +628,41 @@ def patient_dashboard_page():
     
     with tab1:
         st.subheader("Active Prescriptions")
-        st.info("List of current medications and refill request buttons will go here.")
+        patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
+
+        if not patient_prescriptions:
+            st.info("No prescriptions found yet.")
+        else:
+            for idx, rx in enumerate(patient_prescriptions, start=1):
+                st.markdown(
+                    f"**Prescription {idx}**  \n"
+                    f"Diagnosis: {rx.get('diagnosis') or 'Not specified'}  \n"
+                    f"Created: {rx.get('created_at', '')[:10]}",
+                    unsafe_allow_html=False,
+                )
+
+                medicines = rx.get("medicines", [])
+                if medicines:
+                    med_lines = []
+                    for med in medicines:
+                        med_name = (med.get("name") or "").strip()
+                        if not med_name:
+                            continue
+                        dosage = med.get("dosage") or "-"
+                        frequency = med.get("frequency") or "-"
+                        days = med.get("days") or "-"
+                        directions = med.get("directions") or "-"
+                        med_lines.append(
+                            f"- **{med_name}** | Dosage: {dosage} | Frequency: {frequency} | Days: {days} | Directions: {directions}"
+                        )
+                    if med_lines:
+                        st.markdown("\n".join(med_lines))
+                    else:
+                        st.caption("No medicine entries available.")
+                else:
+                    st.caption("No medicine entries available.")
+
+                st.markdown("---")
         
     with tab2:
         st.subheader("Medication Schedule")
