@@ -376,7 +376,14 @@ def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
     load_custom_styles()
 
-    st.markdown(f"<h1 class='patient-welcome'>👋 Welcome back, {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
+    header_col, logout_col = st.columns([6, 1.4])
+    with header_col:
+        st.markdown(f"<h1 class='patient-welcome'>👋 Welcome back, {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
+    with logout_col:
+        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
+        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown(f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
     st.markdown("---")
     
@@ -442,16 +449,3 @@ def patient_dashboard_page():
 
     # Floating chatbot launcher for patient dashboard
     render_floating_chatbot()
-    
-    st.markdown("---")
-    
-    # Logout Logic
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("🚪 Logout", use_container_width=True, key="pat_logout"):
-            st.session_state.logged_in = False
-            st.session_state.user_name = ""
-            st.session_state.user_email = ""
-            st.session_state.user_role = None
-            st.session_state.show_auth = False
-            st.rerun()

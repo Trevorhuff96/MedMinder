@@ -693,12 +693,76 @@ def load_custom_styles():
             box-shadow: none !important;
         }
         
-        .logout-button>button {
-            background: #dc3545 !important;
+        .patient-top-logout {
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-start;
+            padding-top: 0.15rem;
+        }
+
+        .patient-logout-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            min-width: 138px;
+            padding: 0.62rem 1.05rem;
+            border-radius: 14px;
+            text-decoration: none !important;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            font-size: 0.9rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ff8a65 0%, #ef5350 55%, #d84315 100%);
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 10px 24px rgba(200, 72, 27, 0.35);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease;
+        }
+
+        .patient-logout-link:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            background: linear-gradient(135deg, #ff9f7d 0%, #f0625a 55%, #e64a19 100%);
+            box-shadow: 0 14px 28px rgba(200, 72, 27, 0.42);
+            color: #ffffff !important;
+            text-decoration: none !important;
+        }
+
+        .patient-logout-link:focus,
+        .patient-logout-link:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255, 138, 101, 0.24), 0 10px 24px rgba(200, 72, 27, 0.35);
+            text-decoration: none !important;
+        }
+
+        button[id*="pat_logout"],
+        button[id*="doc_logout"] {
+            background: linear-gradient(135deg, #ff8a65 0%, #ef5350 55%, #d84315 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.28) !important;
+            border-radius: 12px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            box-shadow: 0 10px 24px rgba(200, 72, 27, 0.35) !important;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease !important;
         }
         
-        .logout-button>button:hover {
-            box-shadow: 0 5px 20px rgba(220, 53, 69, 0.4) !important;
+        button[id*="pat_logout"]:hover,
+        button[id*="doc_logout"]:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            background: linear-gradient(135deg, #ff9f7d 0%, #f0625a 55%, #e64a19 100%) !important;
+            box-shadow: 0 14px 28px rgba(200, 72, 27, 0.42) !important;
+        }
+
+        button[id*="pat_logout"]:focus,
+        button[id*="pat_logout"]:focus-visible,
+        button[id*="doc_logout"]:focus,
+        button[id*="doc_logout"]:focus-visible {
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(255, 138, 101, 0.24), 0 10px 24px rgba(200, 72, 27, 0.35) !important;
         }
 
         
