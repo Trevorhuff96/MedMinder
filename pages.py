@@ -452,6 +452,9 @@ def prescription_page():
     st.markdown("---")
 
     st.subheader("Prescription Details")
+    rx_left, rx_center, rx_right = st.columns([1, 3, 1])
+    with rx_center:
+        total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2, key="rx_total_medicines")
 
     with st.form("prescription_form"):
         st.markdown("#### Clinical Summary")
@@ -460,7 +463,6 @@ def prescription_page():
         general_notes = st.text_area("General Notes", placeholder="Add overall notes for this prescription...")
 
         st.markdown("#### Medicines")
-        total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2)
 
         medicine_entries = []
         for idx in range(1, total_medicines + 1):
