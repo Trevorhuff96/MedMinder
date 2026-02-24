@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from styles import load_custom_styles
-from pages import landing_page, auth_page, doctor_dashboard_page, patient_dashboard_page
+from pages import landing_page, auth_page, doctor_dashboard_page, patient_dashboard_page, prescription_page
 
 
 def sync_browser_route(route: str) -> None:
@@ -50,6 +50,10 @@ def run_app():
         st.session_state.show_auth = False
     if 'show_signup' not in st.session_state:
         st.session_state.show_signup = False
+    if 'show_prescription' not in st.session_state:
+        st.session_state.show_prescription = False
+    if 'selected_patient' not in st.session_state:
+        st.session_state.selected_patient = ""
 
     # Query-param logout hook for custom HTML logout controls
     logout_param = st.query_params.get("logout")
@@ -60,14 +64,20 @@ def run_app():
         st.session_state.user_role = None
         st.session_state.show_auth = False
         st.session_state.show_signup = False
+        st.session_state.show_prescription = False
+        st.session_state.selected_patient = ""
         st.query_params.clear()
         st.rerun()
 
     # Main App Logic - Route to appropriate page
     if st.session_state.logged_in:
         if st.session_state.user_role == "Doctor":
-            sync_browser_route("doctor")
-            doctor_dashboard_page()
+            if st.session_state.show_prescription:
+                sync_browser_route("prescription")
+                prescription_page()
+            else:
+                sync_browser_route("doctor")
+                doctor_dashboard_page()
         else:
             sync_browser_route("patient")
             patient_dashboard_page()

@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 from auth import authenticate_user, create_user
+from prescription import save_prescription
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
 
@@ -64,12 +65,13 @@ DOB_MAX_DATE = date.today()
 DOB_MIN_DATE = DOB_MAX_DATE - timedelta(days=365 * 100)
 
 def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_code, 
-                           country, phone, email, password, speciality=None):
+                           country, phone, email, password, speciality="__SKIP__"):
     """
     Validate signup form fields for both Doctor and Patient roles.
     
     Args:
         Common fields for both roles, plus optional speciality for doctors
+        speciality: Use "__SKIP__" as default to skip validation (for patients)
     
     Returns:
         dict: Dictionary of field errors {field_name: error_message}
@@ -102,8 +104,8 @@ def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_c
     elif len(password) < 6:
         errors["password"] = "Password must be at least 6 characters."
     
-    # Doctor-specific validation
-    if speciality is not None and speciality == "":
+    # Doctor-specific validation (only validate if speciality was passed)
+    if speciality != "__SKIP__" and speciality is None:
         errors["speciality"] = "Speciality is required."
     
     return errors
@@ -466,6 +468,12 @@ def auth_page():
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
     load_custom_styles()
+    saved_notice = st.session_state.pop("prescription_saved_notice", None)
+    if saved_notice:
+        st.markdown(
+            f"<div class='prescription-toast'>{saved_notice}</div>",
+            unsafe_allow_html=True,
+        )
 
     header_col, logout_col = st.columns([6, 1.4])
     with header_col:
@@ -536,7 +544,155 @@ def doctor_dashboard_page():
         
     with tab3:
         st.subheader("Manage Prescriptions")
-        st.info("UI for writing and renewing prescriptions will go here.")
+        st.markdown("<p class='doctor-rx-subtitle'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
+        dummy_patients = [
+            {"name": "Ethan Carter", "note": "Hypertension follow-up"},
+            {"name": "Sophia Bennett", "note": "Diabetes management"},
+            {"name": "Liam Brooks", "note": "Post-op medication review"},
+            {"name": "Olivia Hayes", "note": "Migraine treatment plan"},
+            {"name": "Noah Turner", "note": "Asthma refill request"},
+        ]
+
+        for idx, patient in enumerate(dummy_patients):
+            name_col, action_col = st.columns([3.6, 1.4])
+            with name_col:
+                st.markdown(
+                    f"""
+                    <div class="doctor-rx-card">
+                        <p class="doctor-rx-name">{patient["name"]}</p>
+                        <p class="doctor-rx-note">{patient["note"]}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with action_col:
+                if st.button("Prescribe", key=f"prescribe_{idx}", use_container_width=True):
+                    st.session_state.show_prescription = True
+                    st.session_state.selected_patient = patient["name"]
+                    st.rerun()
+
+
+def prescription_page():
+    """Display prescription page for the selected patient."""
+    load_custom_styles()
+
+    header_col, logout_col = st.columns([6, 1.4])
+    with header_col:
+        st.markdown("<h1 class='doctor-welcome'>💊 Create Prescription</h1>", unsafe_allow_html=True)
+    with logout_col:
+        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
+        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    patient_name = st.session_state.get("selected_patient", "Unknown Patient")
+    st.markdown(f"<p class='doctor-account-role'><strong>Patient:</strong> {patient_name}</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    st.subheader("Prescription Details")
+
+    with st.form("prescription_form"):
+        st.markdown("#### Clinical Summary")
+        diagnosis = st.text_input("Diagnosis", placeholder="e.g., Type 2 Diabetes Mellitus")
+        follow_up_days = st.number_input("Follow-up in (days)", min_value=1, max_value=180, value=30, step=1)
+        general_notes = st.text_area("General Notes", placeholder="Add overall notes for this prescription...")
+
+        st.markdown("#### Medicines")
+        total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2)
+
+        medicine_entries = []
+        for idx in range(1, total_medicines + 1):
+            st.markdown(f"##### Medicine {idx}")
+            med_col1, med_col2 = st.columns(2)
+            with med_col1:
+                med_name = st.text_input(
+                    f"Medicine Name {idx}",
+                    key=f"rx_med_name_{idx}",
+                    placeholder="e.g., Metformin",
+                )
+                dosage = st.text_input(
+                    f"Dosage {idx}",
+                    key=f"rx_dosage_{idx}",
+                    placeholder="e.g., 500 mg",
+                )
+                frequency = st.selectbox(
+                    f"Frequency {idx}",
+                    [
+                        "Once daily",
+                        "Twice daily",
+                        "Three times daily",
+                        "Every 6 hours",
+                        "Every 8 hours",
+                        "As needed (PRN)",
+                    ],
+                    key=f"rx_frequency_{idx}",
+                )
+            with med_col2:
+                days_to_take = st.number_input(
+                    f"Days to Take {idx}",
+                    min_value=1,
+                    max_value=180,
+                    value=7,
+                    step=1,
+                    key=f"rx_days_{idx}",
+                )
+                route = st.selectbox(
+                    f"Route {idx}",
+                    ["Oral", "Topical", "Injection", "Inhalation", "Other"],
+                    key=f"rx_route_{idx}",
+                )
+                timing = st.text_input(
+                    f"Timing {idx}",
+                    key=f"rx_timing_{idx}",
+                    placeholder="e.g., After meals",
+                )
+
+            directions = st.text_area(
+                f"Directions {idx}",
+                key=f"rx_directions_{idx}",
+                placeholder="e.g., Take one tablet after breakfast and dinner with water.",
+            )
+            st.divider()
+
+            medicine_entries.append(
+                {
+                    "name": med_name,
+                    "dosage": dosage,
+                    "frequency": frequency,
+                    "days": days_to_take,
+                    "route": route,
+                    "timing": timing,
+                    "directions": directions,
+                }
+            )
+
+        submit_rx = st.form_submit_button("Save Prescription")
+
+        if submit_rx:
+            valid_medicines = [m for m in medicine_entries if m["name"].strip()]
+            if not valid_medicines:
+                st.error("Please add at least one medicine name before saving.")
+            else:
+                success, message, prescription_id = save_prescription(
+                    patient_name=patient_name,
+                    doctor_email=st.session_state.get("user_email", ""),
+                    diagnosis=diagnosis,
+                    follow_up_days=follow_up_days,
+                    general_notes=general_notes,
+                    medicines=medicine_entries,
+                )
+
+                if success:
+                    st.session_state.prescription_saved_notice = (
+                        f"Prescription saved for {patient_name}."
+                    )
+                    st.session_state.show_prescription = False
+                    st.rerun()
+                else:
+                    st.error(message)
+
+    if st.button("← Back to Doctor Dashboard", key="back_to_doctor"):
+        st.session_state.show_prescription = False
+        st.rerun()
 
 
 def patient_dashboard_page():

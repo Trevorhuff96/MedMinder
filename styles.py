@@ -582,6 +582,60 @@ def load_custom_styles():
             font-size: 0.9rem;
             margin-bottom: 0;
         }
+
+        .doctor-rx-subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.93rem;
+            margin-bottom: 0.55rem;
+        }
+
+        .doctor-rx-card {
+            background: #f7faff;
+            border: 1px solid #d9e6ff !important;
+            border-radius: 12px;
+            padding: 0.62rem 0.8rem;
+            margin-bottom: 0.55rem;
+            box-shadow: 0 6px 16px rgba(26, 35, 126, 0.12);
+        }
+
+        .doctor-rx-name {
+            color: #1a237e;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 0.12rem;
+        }
+
+        .doctor-rx-note {
+            color: #4f5b7a;
+            font-size: 0.82rem;
+            margin-bottom: 0;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"] {
+            background: linear-gradient(135deg, #42a5f5 0%, #1e88e5 55%, #1565c0 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.24) !important;
+            border-radius: 10px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.01em;
+            min-width: 132px !important;
+            padding: 0.62rem 0.95rem !important;
+            font-size: 0.9rem !important;
+            box-shadow: 0 8px 20px rgba(21, 101, 192, 0.32) !important;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"]:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            background: linear-gradient(135deg, #64b5f6 0%, #2196f3 55%, #1976d2 100%) !important;
+            box-shadow: 0 12px 24px rgba(21, 101, 192, 0.38) !important;
+        }
+
+        div[data-testid="stButton"] > button[id*="prescribe_"]:focus,
+        div[data-testid="stButton"] > button[id*="prescribe_"]:focus-visible {
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.22), 0 8px 20px rgba(21, 101, 192, 0.32) !important;
+        }
         
         /* Form Styling */
         div[data-testid="stForm"] {
@@ -731,6 +785,34 @@ def load_custom_styles():
             outline: none;
             box-shadow: 0 0 0 3px rgba(255, 138, 101, 0.24), 0 10px 24px rgba(200, 72, 27, 0.35);
             text-decoration: none !important;
+        }
+
+        .prescription-toast {
+            position: fixed;
+            left: 20px;
+            bottom: 22px;
+            z-index: 1200;
+            max-width: 380px;
+            padding: 0.72rem 0.95rem;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #00bfa5 0%, #00897b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 14px 30px rgba(0, 121, 107, 0.35);
+            animation: toast-slide-in 0.22s ease-out;
+        }
+
+        @keyframes toast-slide-in {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         button[id*="pat_logout"],
