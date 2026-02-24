@@ -7,6 +7,7 @@ from datetime import date, timedelta
 import streamlit as st
 from auth import authenticate_user, create_user
 from styles import load_custom_styles
+from ui_components import render_floating_chatbot
 
 US_STATES = [
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
@@ -438,6 +439,9 @@ def patient_dashboard_page():
     with tab3:
         st.subheader("Contact Doctor")
         st.info("Secure messaging interface with care providers will go here.")
+
+    # Floating chatbot launcher for patient dashboard
+    render_floating_chatbot()
     
     st.markdown("---")
     
