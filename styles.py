@@ -439,7 +439,14 @@ def load_custom_styles():
         div[data-testid="stForm"] input,
         div[data-testid="stForm"] textarea,
         div[data-testid="stForm"] select {
-            color: #ffffff !important;
+            color: #111111 !important;
+            -webkit-text-fill-color: #111111 !important;
+        }
+
+        div[data-testid="stForm"] input::placeholder,
+        div[data-testid="stForm"] textarea::placeholder {
+            color: #6b7280 !important;
+            -webkit-text-fill-color: #6b7280 !important;
         }
         
         
