@@ -144,3 +144,75 @@ def save_prescription(patient_name, doctor_email, diagnosis, follow_up_days, gen
         return False, f"Failed to save prescription: {exc}", None
     finally:
         conn.close()
+
+
+def get_prescriptions_for_patient(patient_email):
+    """
+    Fetch prescriptions for a specific patient email.
+
+    Returns:
+        list[dict]: Prescriptions with parsed medicine entries.
+    """
+    if not patient_email:
+        return []
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    cursor.execute(
+        """
+        SELECT p.patient_id, u.name
+        FROM patients p
+        JOIN users u ON u.email = p.email
+        WHERE p.email = ? AND u.role = 'Patient'
+        LIMIT 1
+        """,
+        (patient_email,),
+    )
+    patient_row = cursor.fetchone()
+    if not patient_row:
+        conn.close()
+        return []
+
+    patient_id, patient_name = patient_row
+
+    cursor.execute(
+        """
+        SELECT
+            prescription_id,
+            diagnosis,
+            follow_up_days,
+            general_notes,
+            medicines_json,
+            created_at
+        FROM prescription
+        WHERE patient_id = ?
+           OR (patient_id IS NULL AND patient_name = ?)
+        ORDER BY created_at DESC
+        """,
+        (patient_id, patient_name),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    prescriptions = []
+    for row in rows:
+        medicines = []
+        try:
+            medicines = json.loads(row[4]) if row[4] else []
+        except json.JSONDecodeError:
+            medicines = []
+
+        prescriptions.append(
+            {
+                "prescription_id": row[0],
+                "diagnosis": row[1],
+                "follow_up_days": row[2],
+                "general_notes": row[3],
+                "medicines": medicines,
+                "created_at": row[5],
+            }
+        )
+
+    return prescriptions

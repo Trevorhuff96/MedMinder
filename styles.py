@@ -679,6 +679,28 @@ def load_custom_styles():
             color: #6b7280 !important;
             -webkit-text-fill-color: #6b7280 !important;
         }
+
+        div[data-testid="stSelectbox"] > label {
+            color: #e6f2ff !important;
+            font-weight: 600 !important;
+        }
+
+        div[data-testid="stSelectbox"] [data-baseweb="select"] {
+            background: #ffffff !important;
+            border: 1px solid #cfdcff !important;
+            border-radius: 10px !important;
+            min-height: 42px !important;
+        }
+
+        div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+            color: #1a237e !important;
+            font-weight: 600 !important;
+        }
+
+        div[data-testid="stSelectbox"] [data-baseweb="select"]:focus-within {
+            border-color: #00bfa5 !important;
+            box-shadow: 0 0 0 2px rgba(0, 191, 165, 0.18) !important;
+        }
         
         
         .stTextInput>div[data-baseweb="input"]>input {

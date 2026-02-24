@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 from auth import authenticate_user, create_user, get_all_patients
-from prescription import save_prescription
+from prescription import save_prescription, get_prescriptions_for_patient
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
 
@@ -587,6 +587,9 @@ def prescription_page():
     st.markdown("---")
 
     st.subheader("Prescription Details")
+    rx_left, rx_center, rx_right = st.columns([1, 3, 1])
+    with rx_center:
+        total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2, key="rx_total_medicines")
 
     with st.form("prescription_form"):
         st.markdown("#### Clinical Summary")
@@ -595,7 +598,6 @@ def prescription_page():
         general_notes = st.text_area("General Notes", placeholder="Add overall notes for this prescription...")
 
         st.markdown("#### Medicines")
-        total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2)
 
         medicine_entries = []
         for idx in range(1, total_medicines + 1):
@@ -761,7 +763,41 @@ def patient_dashboard_page():
     
     with tab1:
         st.subheader("Active Prescriptions")
-        st.info("List of current medications and refill request buttons will go here.")
+        patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
+
+        if not patient_prescriptions:
+            st.info("No prescriptions found yet.")
+        else:
+            for idx, rx in enumerate(patient_prescriptions, start=1):
+                st.markdown(
+                    f"**Prescription {idx}**  \n"
+                    f"Diagnosis: {rx.get('diagnosis') or 'Not specified'}  \n"
+                    f"Created: {rx.get('created_at', '')[:10]}",
+                    unsafe_allow_html=False,
+                )
+
+                medicines = rx.get("medicines", [])
+                if medicines:
+                    med_lines = []
+                    for med in medicines:
+                        med_name = (med.get("name") or "").strip()
+                        if not med_name:
+                            continue
+                        dosage = med.get("dosage") or "-"
+                        frequency = med.get("frequency") or "-"
+                        days = med.get("days") or "-"
+                        directions = med.get("directions") or "-"
+                        med_lines.append(
+                            f"- **{med_name}** | Dosage: {dosage} | Frequency: {frequency} | Days: {days} | Directions: {directions}"
+                        )
+                    if med_lines:
+                        st.markdown("\n".join(med_lines))
+                    else:
+                        st.caption("No medicine entries available.")
+                else:
+                    st.caption("No medicine entries available.")
+
+                st.markdown("---")
         
     with tab2:
         st.subheader("Medication Schedule")
