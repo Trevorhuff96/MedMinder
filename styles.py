@@ -78,7 +78,6 @@ def load_custom_styles():
             font-weight: 500;
         }
         
-        
         /* Hide Streamlit decorations */
         #MainMenu {
             visibility: hidden;
@@ -331,6 +330,80 @@ def load_custom_styles():
             background: #0b3b86 !important;
             transform: none !important;
             box-shadow: none !important;
+        }
+
+        .patient-welcome,
+        .patient-account-role {
+            color: #ffffff !important;
+        }
+
+        .patient-metric-card {
+            background: linear-gradient(160deg, rgba(255, 255, 255, 0.2) 0%, rgba(19, 62, 151, 0.38) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            border-radius: 16px;
+            padding: 1rem 1rem 0.95rem 1rem;
+            min-height: 176px;
+            box-shadow: 0 14px 30px rgba(8, 29, 83, 0.28);
+            backdrop-filter: blur(8px);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .patient-metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 18px 34px rgba(8, 29, 83, 0.34);
+        }
+
+        .patient-metric-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .patient-metric-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.28) !important;
+        }
+
+        .patient-metric-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #e6f2ff;
+            background: rgba(0, 191, 165, 0.22);
+            border: 1px solid rgba(0, 191, 165, 0.5) !important;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+        }
+
+        .patient-metric-label {
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 0.84rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            margin-bottom: 0.35rem;
+        }
+
+        .patient-metric-value {
+            color: #ffffff;
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 0.3rem;
+        }
+
+        .patient-metric-detail {
+            color: rgba(232, 244, 255, 0.92);
+            font-size: 0.9rem;
+            margin-bottom: 0;
         }
         
         /* Form Styling */

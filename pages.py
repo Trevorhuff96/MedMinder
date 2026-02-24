@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 from auth import authenticate_user, create_user
+from styles import load_custom_styles
 
 US_STATES = [
     "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
@@ -372,15 +373,54 @@ def doctor_dashboard_page():
 
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
-    st.markdown(f"# 👋 Welcome back, {st.session_state.user_name}!")
-    st.markdown(f"**Account:** {st.session_state.user_email} | **Role:** {st.session_state.user_role}")
+    load_custom_styles()
+
+    st.markdown(f"<h1 class='patient-welcome'>👋 Welcome back, {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
     st.markdown("---")
     
-    # Mock Patient Metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Next Dose", "2:00 PM", "Lisinopril 10mg")
-    col2.metric("Medication Adherence", "94%", "Great job!")
-    col3.metric("Next Appointment", "Oct 12", "Dr. Smith")
+    # Patient summary metrics
+    metrics = [
+        {
+            "icon": "⏰",
+            "label": "Next Dose",
+            "value": "2:00 PM",
+            "detail": "Lisinopril 10mg",
+            "badge": "Today",
+        },
+        {
+            "icon": "📈",
+            "label": "Medication Adherence",
+            "value": "94%",
+            "detail": "Great job this week",
+            "badge": "+2%",
+        },
+        {
+            "icon": "🩺",
+            "label": "Next Appointment",
+            "value": "Oct 12",
+            "detail": "Dr. Smith",
+            "badge": "10:30 AM",
+        },
+    ]
+
+    cols = st.columns(3)
+    for col, metric in zip(cols, metrics):
+        with col:
+            st.markdown(
+                f"""
+                <div class="patient-metric-card">
+                    <div class="patient-metric-head">
+                        <span class="patient-metric-icon">{metric["icon"]}</span>
+                        <span class="patient-metric-badge">{metric["badge"]}</span>
+                    </div>
+                    <p class="patient-metric-label">{metric["label"]}</p>
+                    <h3 class="patient-metric-value">{metric["value"]}</h3>
+                    <p class="patient-metric-detail">{metric["detail"]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     
     st.markdown("<br>", unsafe_allow_html=True)
     
