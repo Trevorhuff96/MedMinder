@@ -6,7 +6,14 @@ from datetime import date, timedelta
 from html import escape
 
 import streamlit as st
-from auth import authenticate_user, create_user, get_all_patients, get_user_profile, update_user_profile
+from auth import (
+    authenticate_user,
+    create_user,
+    get_all_patients,
+    get_specialities,
+    get_user_profile,
+    update_user_profile,
+)
 from prescription import save_prescription, get_prescriptions_for_patient
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
@@ -245,9 +252,10 @@ def auth_page():
                 st.markdown("<h4 class='auth-subtitle'>Professional Details</h4>", unsafe_allow_html=True)
                 phone = st.text_input("Phone", placeholder="Enter phone number")
                 phone_error = st.empty()
+                speciality_options = get_specialities()
                 speciality = st.selectbox(
                     "Speciality",
-                    ["Cardiologist", "Dentist", "Neurologist", "Pediatrician", "General Practitioner"],
+                    speciality_options,
                     index=None,
                     placeholder="Select your specialty",
                 )

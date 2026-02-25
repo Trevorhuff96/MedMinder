@@ -7,6 +7,7 @@ from html import escape
 
 import streamlit as st
 import streamlit.components.v1 as components
+from auth import get_specialities
 from prescription import get_prescriptions_for_patient
 from styles import get_chatbot_component_css
 
@@ -42,6 +43,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
     greeting = f"Hi {safe_name} 👋" if safe_name else "Hi 👋"
     prescription_summary = _build_prescription_summary(patient_email or "")
     prescription_summary_json = json.dumps(prescription_summary)
+    speciality_options_json = json.dumps(get_specialities())
     components.html(
         """
         <!doctype html>
@@ -67,7 +69,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
                             <button
                                 class="mm-chatbot-option"
                                 type="button"
-                                onclick="appendUserMessage(this, 'Book Appointment');"
+                                onclick="handleBookAppointment(this);"
                             >
                                 Book Appointment
                             </button>
@@ -101,6 +103,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
 
         <script>
         const rxSummary = __MM_RX_SUMMARY_JSON__;
+        const specialityOptions = __MM_SPECIALITY_OPTIONS_JSON__;
 
         function appendMessage(target, text, isUser, asHtml) {
             const body = target.closest('.mm-chatbot-body');
@@ -126,6 +129,33 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
             appendMessage(target, text, false, !!asHtml);
         }
 
+        function appendSpecialityOptions(target) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return;
+            const thread = body.querySelector('.mm-chatbot-thread');
+            if (!thread || !Array.isArray(specialityOptions) || specialityOptions.length === 0) return;
+            const optionsWrap = document.createElement('div');
+            optionsWrap.className = 'mm-chatbot-options';
+            specialityOptions.forEach((speciality) => {
+                const optionBtn = document.createElement('button');
+                optionBtn.type = 'button';
+                optionBtn.className = 'mm-chatbot-option';
+                optionBtn.textContent = speciality;
+                optionBtn.onclick = function () {
+                    appendUserMessage(optionBtn, speciality);
+                };
+                optionsWrap.appendChild(optionBtn);
+            });
+            thread.appendChild(optionsWrap);
+            thread.scrollTop = thread.scrollHeight;
+        }
+
+        function handleBookAppointment(target) {
+            appendUserMessage(target, 'Book Appointment');
+            appendBotMessage(target, 'What speciality are you looking for?', false);
+            appendSpecialityOptions(target);
+        }
+
         (function () {
             const frame = window.frameElement;
             if (frame) {
@@ -146,7 +176,8 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         """
         .replace("__MM_CHATBOT_COMPONENT_CSS__", chatbot_css)
         .replace("__MM_CHATBOT_GREETING__", greeting)
-        .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json),
+        .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json)
+        .replace("__MM_SPECIALITY_OPTIONS_JSON__", speciality_options_json),
         height=520,
         scrolling=False,
     )

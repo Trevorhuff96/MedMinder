@@ -8,6 +8,13 @@ import re
 from datetime import datetime
 
 DB_FILE = "medminder.db"
+DEFAULT_SPECIALITIES = [
+    "Cardiologist",
+    "Dentist",
+    "Neurologist",
+    "Pediatrician",
+    "General Practitioner",
+]
 
 def _column_exists(cursor, table_name, column_name):
     """Check whether a column exists in a SQLite table."""
@@ -110,6 +117,19 @@ def init_db():
         )
     ''')
 
+    # Doctor specialities lookup table used by onboarding and chatbot options.
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Specialities (
+            speciality_name TEXT PRIMARY KEY
+        )
+        """
+    )
+    cursor.executemany(
+        "INSERT OR IGNORE INTO Specialities (speciality_name) VALUES (?)",
+        [(speciality,) for speciality in DEFAULT_SPECIALITIES],
+    )
+
     # Migrate old schemas (email-as-primary-key) to new id-based schemas
     if not _column_exists(cursor, "doctors", "doctor_id"):
         _migrate_doctors_table(cursor)
@@ -120,6 +140,23 @@ def init_db():
     conn.close()
 
 init_db()
+
+
+def get_specialities():
+    """Fetch all configured doctor specialities from the database."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT speciality_name
+        FROM Specialities
+        WHERE TRIM(speciality_name) <> ''
+        ORDER BY speciality_name COLLATE NOCASE ASC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
 
 def is_valid_email(email: str) -> bool:
     """
