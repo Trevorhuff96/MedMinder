@@ -197,10 +197,10 @@ def auth_page():
     st.markdown("<h1 class='auth-title'>🔐 Welcome to MedMinder</h1>", unsafe_allow_html=True)
 
     # Back to landing page button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
+    back_left, back_center, back_right = st.columns([1, 6, 1])
+    with back_center:
         st.markdown('<div class="auth-back">', unsafe_allow_html=True)
-        if st.button("← Back", key="back_button"):
+        if st.button("< Back", key="back_button"):
             st.session_state.show_auth = False
             st.session_state.show_signup = False
             if "role" in st.session_state:
@@ -587,8 +587,13 @@ def prescription_page():
     st.markdown(f"<p class='doctor-account-role'><strong>Patient:</strong> {patient_name}</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    st.subheader("Prescription Details")
-    rx_left, rx_center, rx_right = st.columns([1, 3, 1])
+    if st.button("< Back to Doctor Dashboard", key="back_to_doctor"):
+        st.session_state.show_prescription = False
+        st.session_state.selected_patient_id = None
+        st.rerun()
+
+    st.markdown("<h2 class='rx-title'>Prescription Details</h2>", unsafe_allow_html=True)
+    rx_left, rx_center, rx_right = st.columns([2, 4, 2])
     with rx_center:
         total_medicines = st.selectbox("Total Medicines", [1, 2, 3, 4, 5], index=2, key="rx_total_medicines")
 
@@ -692,12 +697,6 @@ def prescription_page():
                     st.rerun()
                 else:
                     st.error(message)
-
-    if st.button("← Back to Doctor Dashboard", key="back_to_doctor"):
-        st.session_state.show_prescription = False
-        st.session_state.selected_patient_id = None
-        st.rerun()
-
 
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""

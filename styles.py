@@ -138,7 +138,7 @@ def get_chatbot_component_css():
         .mm-chatbot-send {
             border: none;
             border-radius: 999px;
-            background: linear-gradient(140deg, #00bfa5 0%, #1a237e 100%);
+            background: #0B2F5B;
             color: #ffffff;
             font-weight: 700;
             font-size: 0.78rem;
@@ -413,6 +413,12 @@ def load_custom_styles():
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
         }
 
+        .auth-container div[data-testid="stForm"] {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
         div[data-testid="stTabs"] div[data-testid="stTabContent"] {
             padding: 0.5rem 0 0 0;
             background: transparent;
@@ -493,7 +499,7 @@ def load_custom_styles():
             width: auto !important;
             min-width: 48px;
             padding: 0.2rem 0.45rem !important;
-            background: #0d47a1 !important;
+            background: #0B2F5B !important;
             color: rgba(255, 255, 255, 0.9) !important;
             font-size: 0.68rem;
             border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -502,7 +508,7 @@ def load_custom_styles():
         }
 
         .auth-back .stButton>button:hover {
-            background: #0b3b86 !important;
+            background: #092749 !important;
             transform: none !important;
             box-shadow: none !important;
         }
@@ -795,11 +801,22 @@ def load_custom_styles():
                 color: #ffffff !important;
                 -webkit-text-fill-color: #ffffff !important;
             }
+
+            div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+                color: #ffffff !important;
+            }
+        }
+        
+        /* Number input spinner buttons */
+        div[data-testid="stNumberInput"] button {
+            height: 100% !important;
+            min-height: 42px !important;
+            padding: 0 !important;
         }
         
         .stButton>button {
             width: 100%;
-            background: #00BFA5 !important;
+            background: #0B2F5B !important;
             color: white !important;
             border: none !important;
             padding: 0.75rem !important;
@@ -834,14 +851,14 @@ def load_custom_styles():
 
         div[data-testid="stForm"] div[data-testid="stFormSubmitButton"] button:hover,
         div[data-testid="stForm"] .stButton>button:hover {
-            background: #00BFA5 !important;
+            background: #0B2F5B !important;
             color: #ffffff !important;
         }
         
         .stButton>button:hover {
-            background: #1a9a8f !important;
+            background: #0B2F5B !important;
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(32, 178, 170, 0.4) !important;
+            box-shadow: 0 5px 20px rgba(11, 47, 91, 0.4) !important;
         }
 
         .patient-top-logout {
@@ -885,6 +902,14 @@ def load_custom_styles():
             outline: none;
             box-shadow: 0 0 0 3px rgba(255, 138, 101, 0.24), 0 10px 24px rgba(200, 72, 27, 0.35);
             text-decoration: none !important;
+        }
+
+        .rx-title {
+            text-align: center;
+            color: #ffffff;
+            font-size: 1.45rem;
+            font-weight: 700;
+            margin: 0.5rem 0 0.75rem 0;
         }
 
         .prescription-toast {
