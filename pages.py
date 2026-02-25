@@ -3,6 +3,7 @@ Page components for the MedMinder app
 """
 
 from datetime import date, timedelta
+from html import escape
 
 import streamlit as st
 from auth import authenticate_user, create_user, get_all_patients
@@ -769,35 +770,44 @@ def patient_dashboard_page():
             st.info("No prescriptions found yet.")
         else:
             for idx, rx in enumerate(patient_prescriptions, start=1):
-                st.markdown(
-                    f"**Prescription {idx}**  \n"
-                    f"Diagnosis: {rx.get('diagnosis') or 'Not specified'}  \n"
-                    f"Created: {rx.get('created_at', '')[:10]}",
-                    unsafe_allow_html=False,
-                )
-
+                diagnosis = escape(rx.get("diagnosis") or "Not specified")
+                created_at = escape((rx.get("created_at") or "")[:10])
+                follow_up = rx.get("follow_up_days") or "-"
                 medicines = rx.get("medicines", [])
                 if medicines:
                     med_lines = []
                     for med in medicines:
-                        med_name = (med.get("name") or "").strip()
+                        med_name = escape((med.get("name") or "").strip())
                         if not med_name:
                             continue
-                        dosage = med.get("dosage") or "-"
-                        frequency = med.get("frequency") or "-"
-                        days = med.get("days") or "-"
-                        directions = med.get("directions") or "-"
+                        dosage = escape(str(med.get("dosage") or "-"))
+                        frequency = escape(str(med.get("frequency") or "-"))
+                        days = escape(str(med.get("days") or "-"))
+                        directions = escape(str(med.get("directions") or "-"))
                         med_lines.append(
-                            f"- **{med_name}** | Dosage: {dosage} | Frequency: {frequency} | Days: {days} | Directions: {directions}"
+                            f"<li><span class='patient-med-name'>{med_name}</span>"
+                            f"<span class='patient-med-meta'>Dosage: {dosage} • Frequency: {frequency} • Days: {days}</span>"
+                            f"<span class='patient-med-dir'>Directions: {directions}</span></li>"
                         )
-                    if med_lines:
-                        st.markdown("\n".join(med_lines))
-                    else:
-                        st.caption("No medicine entries available.")
                 else:
-                    st.caption("No medicine entries available.")
+                    med_lines = ["<li><span class='patient-med-dir'>No medicine entries available.</span></li>"]
 
-                st.markdown("---")
+                st.markdown(
+                    f"""
+                    <div class="patient-rx-card">
+                        <div class="patient-rx-head">
+                            <span class="patient-rx-title">Prescription {idx}</span>
+                            <span class="patient-rx-date">{created_at or "-"}</span>
+                        </div>
+                        <p class="patient-rx-diagnosis"><strong>Diagnosis:</strong> {diagnosis}</p>
+                        <p class="patient-rx-followup"><strong>Follow-up:</strong> {follow_up} days</p>
+                        <ul class="patient-med-list">
+                            {''.join(med_lines)}
+                        </ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
         
     with tab2:
         st.subheader("Medication Schedule")

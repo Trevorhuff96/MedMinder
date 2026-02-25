@@ -583,6 +583,84 @@ def load_custom_styles():
             margin-bottom: 0;
         }
 
+        .patient-rx-card {
+            background: #f8fbff;
+            border: 1px solid #d7e6ff !important;
+            border-radius: 14px;
+            padding: 0.85rem 1rem;
+            margin-bottom: 0.9rem;
+            box-shadow: 0 10px 22px rgba(26, 35, 126, 0.12);
+        }
+
+        .patient-rx-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .patient-rx-title {
+            color: #1a237e;
+            font-size: 0.98rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+
+        .patient-rx-date {
+            color: #234084;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: #eaf2ff;
+            padding: 0.16rem 0.48rem;
+            border-radius: 999px;
+            border: 1px solid #cfe0ff !important;
+        }
+
+        .patient-rx-diagnosis,
+        .patient-rx-followup {
+            color: #2e3d63;
+            font-size: 0.88rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .patient-med-list {
+            margin: 0.45rem 0 0 0;
+            padding-left: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .patient-med-list li {
+            color: #1f2c4f;
+            background: #ffffff;
+            border: 1px solid #d9e7ff !important;
+            border-radius: 10px;
+            padding: 0.5rem 0.65rem;
+            list-style: none;
+        }
+
+        .patient-med-name {
+            display: block;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 0.12rem;
+        }
+
+        .patient-med-meta {
+            display: block;
+            color: #4f5b7a;
+            font-size: 0.8rem;
+            margin-bottom: 0.12rem;
+        }
+
+        .patient-med-dir {
+            display: block;
+            color: #334a7d;
+            font-size: 0.8rem;
+        }
+
         .doctor-rx-subtitle {
             color: rgba(255, 255, 255, 0.9);
             font-size: 0.93rem;
