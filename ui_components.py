@@ -2,14 +2,46 @@
 Reusable UI components for MedMinder pages.
 """
 
+import json
+from html import escape
+
 import streamlit as st
 import streamlit.components.v1 as components
+from prescription import get_prescriptions_for_patient
 from styles import get_chatbot_component_css
 
 
-def render_floating_chatbot() -> None:
+def _build_prescription_summary(patient_email: str) -> str:
+    """Build a short medication summary HTML for chatbot responses."""
+    prescriptions = get_prescriptions_for_patient(patient_email)
+    if not prescriptions:
+        return "I could not find any prescriptions for you yet."
+
+    medicines = prescriptions[0].get("medicines", [])
+    summary_lines = []
+    for med in medicines:
+        med_name = escape(str(med.get("name") or "").strip())
+        if not med_name:
+            continue
+        dosage = escape(str(med.get("dosage") or "-").strip())
+        frequency = escape(str(med.get("frequency") or "-").strip())
+        summary_lines.append(
+            f"<strong>{med_name}</strong>: Dosage {dosage}, Frequency {frequency}"
+        )
+
+    if not summary_lines:
+        return "I found your prescription, but medicine details are not available."
+
+    return "Here is your latest prescription summary:<br>" + "<br>".join(summary_lines)
+
+
+def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> None:
     """Render a floating chatbot launcher and greeting panel."""
     chatbot_css = get_chatbot_component_css()
+    safe_name = escape((patient_name or "").strip())
+    greeting = f"Hi {safe_name} 👋" if safe_name else "Hi 👋"
+    prescription_summary = _build_prescription_summary(patient_email or "")
+    prescription_summary_json = json.dumps(prescription_summary)
     components.html(
         """
         <!doctype html>
@@ -29,9 +61,24 @@ def render_floating_chatbot() -> None:
                 <div class="mm-chatbot-header">MedMinder Assistant</div>
                 <div class="mm-chatbot-body">
                     <div class="mm-chatbot-thread">
-                        <p class="mm-chatbot-message">Hi 👋</p>
-                        <p class="mm-chatbot-message user">I need help with my reminders.</p>
-                        <p class="mm-chatbot-message">Sure. Type below and press Send.</p>
+                        <p class="mm-chatbot-message">__MM_CHATBOT_GREETING__</p>
+                        <p class="mm-chatbot-message">What can I help you with today?</p>
+                        <div class="mm-chatbot-options">
+                            <button
+                                class="mm-chatbot-option"
+                                type="button"
+                                onclick="appendUserMessage(this, 'Book Appointment');"
+                            >
+                                Book Appointment
+                            </button>
+                            <button
+                                class="mm-chatbot-option"
+                                type="button"
+                                onclick="appendUserMessage(this, 'See Prescription'); appendBotMessage(this, rxSummary, true);"
+                            >
+                                See Prescription
+                            </button>
+                        </div>
                     </div>
                     <form class="mm-chatbot-composer" onsubmit="return false;">
                         <input
@@ -43,7 +90,7 @@ def render_floating_chatbot() -> None:
                         <button
                             class="mm-chatbot-send"
                             type="button"
-                            onclick="const body=this.closest('.mm-chatbot-body'); const input=body.querySelector('.mm-chatbot-input'); const thread=body.querySelector('.mm-chatbot-thread'); const text=input.value.trim(); if (text) { const bubble=document.createElement('p'); bubble.className='mm-chatbot-message user'; bubble.textContent=text; thread.appendChild(bubble); input.value=''; thread.scrollTop=thread.scrollHeight; }"
+                            onclick="const body=this.closest('.mm-chatbot-body'); const input=body.querySelector('.mm-chatbot-input'); const text=input.value.trim(); if (text) { appendUserMessage(this, text); input.value=''; }"
                         >
                             Send
                         </button>
@@ -53,6 +100,32 @@ def render_floating_chatbot() -> None:
         </div>
 
         <script>
+        const rxSummary = __MM_RX_SUMMARY_JSON__;
+
+        function appendMessage(target, text, isUser, asHtml) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return;
+            const thread = body.querySelector('.mm-chatbot-thread');
+            if (!thread) return;
+            const bubble = document.createElement('p');
+            bubble.className = isUser ? 'mm-chatbot-message user' : 'mm-chatbot-message';
+            if (asHtml) {
+                bubble.innerHTML = text;
+            } else {
+                bubble.textContent = text;
+            }
+            thread.appendChild(bubble);
+            thread.scrollTop = thread.scrollHeight;
+        }
+
+        function appendUserMessage(target, text) {
+            appendMessage(target, text, true, false);
+        }
+
+        function appendBotMessage(target, text, asHtml) {
+            appendMessage(target, text, false, !!asHtml);
+        }
+
         (function () {
             const frame = window.frameElement;
             if (frame) {
@@ -70,7 +143,10 @@ def render_floating_chatbot() -> None:
         </script>
         </body>
         </html>
-        """.replace("__MM_CHATBOT_COMPONENT_CSS__", chatbot_css),
+        """
+        .replace("__MM_CHATBOT_COMPONENT_CSS__", chatbot_css)
+        .replace("__MM_CHATBOT_GREETING__", greeting)
+        .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json),
         height=520,
         scrolling=False,
     )

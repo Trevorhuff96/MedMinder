@@ -979,7 +979,10 @@ def patient_dashboard_page():
     # Floating chatbot launcher for patient dashboard
     # Keep it hidden while the side menu is open so it does not block menu clicks.
     if not st.session_state.get("menu_open", False):
-        render_floating_chatbot()
+        render_floating_chatbot(
+            st.session_state.get("user_name", ""),
+            st.session_state.get("user_email", ""),
+        )
 
 
 

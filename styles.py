@@ -112,6 +112,29 @@ def get_chatbot_component_css():
             padding-right: 0.2rem;
         }
 
+        .mm-chatbot-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+
+        .mm-chatbot-option {
+            border: 1px solid #b7c8ff;
+            background: #ffffff;
+            color: #1a237e;
+            border-radius: 999px;
+            padding: 0.35rem 0.65rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .mm-chatbot-option:hover {
+            background: #e9f0ff;
+            border-color: #90abff;
+        }
+
         .mm-chatbot-composer {
             display: flex;
             align-items: center;
