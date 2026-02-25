@@ -180,16 +180,19 @@ def get_prescriptions_for_patient(patient_email):
     cursor.execute(
         """
         SELECT
-            prescription_id,
-            diagnosis,
-            follow_up_days,
-            general_notes,
-            medicines_json,
-            created_at
-        FROM prescription
+            rx.prescription_id,
+            rx.diagnosis,
+            rx.follow_up_days,
+            rx.general_notes,
+            rx.medicines_json,
+            rx.created_at,
+            rx.doctor_email,
+            du.name AS doctor_name
+        FROM prescription rx
+        LEFT JOIN users du ON du.email = rx.doctor_email AND du.role = 'Doctor'
         WHERE patient_id = ?
            OR (patient_id IS NULL AND patient_name = ?)
-        ORDER BY created_at DESC
+        ORDER BY rx.created_at DESC
         """,
         (patient_id, patient_name),
     )
@@ -212,6 +215,8 @@ def get_prescriptions_for_patient(patient_email):
                 "general_notes": row[3],
                 "medicines": medicines,
                 "created_at": row[5],
+                "doctor_email": row[6],
+                "doctor_name": row[7],
             }
         )
 

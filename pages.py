@@ -917,21 +917,96 @@ def patient_dashboard_page():
             )
     
     st.markdown("<br>", unsafe_allow_html=True)
+
+    patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
     
     # Patient Specific Tabs
     tab1, tab2, tab3 = st.tabs(["💊 My Medications", "🔔 Reminders", "🩺 Care Team"])
     
     with tab1:
         st.subheader("Active Prescriptions")
-        patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
 
         if not patient_prescriptions:
             st.info("No prescriptions found yet.")
         else:
-            for idx, rx in enumerate(patient_prescriptions, start=1):
+            diagnosis_options = sorted(
+                {
+                    (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+                    for rx in patient_prescriptions
+                }
+            )
+            medicine_options = sorted(
+                {
+                    (med.get("name") or "").strip()
+                    for rx in patient_prescriptions
+                    for med in rx.get("medicines", [])
+                    if (med.get("name") or "").strip()
+                }
+            )
+            doctor_options = sorted(
+                {
+                    (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+                    for rx in patient_prescriptions
+                }
+            )
+
+            st.markdown(
+                "<h4 class='patient-filter-title'>Filter Medications</h4>",
+                unsafe_allow_html=True,
+            )
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+            with filter_col1:
+                st.markdown("<p class='patient-filter-label'>Diagnosis</p>", unsafe_allow_html=True)
+                selected_diagnosis = st.selectbox(
+                    "Diagnosis",
+                    ["All"] + diagnosis_options,
+                    key="patient_filter_diagnosis",
+                    label_visibility="collapsed",
+                )
+            with filter_col2:
+                st.markdown("<p class='patient-filter-label'>Medicine Name</p>", unsafe_allow_html=True)
+                selected_medicine = st.selectbox(
+                    "Medicine Name",
+                    ["All"] + medicine_options,
+                    key="patient_filter_medicine",
+                    label_visibility="collapsed",
+                )
+            with filter_col3:
+                st.markdown("<p class='patient-filter-label'>Doctor</p>", unsafe_allow_html=True)
+                selected_doctor = st.selectbox(
+                    "Doctor",
+                    ["All"] + doctor_options,
+                    key="patient_filter_doctor",
+                    label_visibility="collapsed",
+                )
+
+            filtered_prescriptions = []
+            for rx in patient_prescriptions:
+                diagnosis_value = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+                doctor_value = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+                medicine_names = {
+                    (med.get("name") or "").strip()
+                    for med in rx.get("medicines", [])
+                    if (med.get("name") or "").strip()
+                }
+
+                if selected_diagnosis != "All" and diagnosis_value != selected_diagnosis:
+                    continue
+                if selected_doctor != "All" and doctor_value != selected_doctor:
+                    continue
+                if selected_medicine != "All" and selected_medicine not in medicine_names:
+                    continue
+
+                filtered_prescriptions.append(rx)
+
+            if not filtered_prescriptions:
+                st.info("No prescriptions match the selected filters.")
+
+            for idx, rx in enumerate(filtered_prescriptions, start=1):
                 diagnosis = escape(rx.get("diagnosis") or "Not specified")
                 created_at = escape((rx.get("created_at") or "")[:10])
                 follow_up = rx.get("follow_up_days") or "-"
+                doctor_name = escape((rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor"))
                 medicines = rx.get("medicines", [])
                 if medicines:
                     med_lines = []
@@ -958,6 +1033,7 @@ def patient_dashboard_page():
                             <span class="patient-rx-title">Prescription {idx}</span>
                             <span class="patient-rx-date">{created_at or "-"}</span>
                         </div>
+                        <p class="patient-rx-doctor"><strong>Doctor:</strong> {doctor_name}</p>
                         <p class="patient-rx-diagnosis"><strong>Diagnosis:</strong> {diagnosis}</p>
                         <p class="patient-rx-followup"><strong>Follow-up:</strong> {follow_up} days</p>
                         <ul class="patient-med-list">
@@ -973,8 +1049,49 @@ def patient_dashboard_page():
         st.info("Daily timeline of when to take medications will go here.")
         
     with tab3:
-        st.subheader("Contact Doctor")
-        st.info("Secure messaging interface with care providers will go here.")
+        st.subheader("Care Team")
+        if not patient_prescriptions:
+            st.info("No care team members found yet.")
+        else:
+            doctor_map = {}
+            for rx in patient_prescriptions:
+                doctor_email = (rx.get("doctor_email") or "").strip()
+                doctor_name = (rx.get("doctor_name") or doctor_email or "Unknown doctor").strip()
+                doctor_key = doctor_email or doctor_name
+                medicines = {
+                    (med.get("name") or "").strip()
+                    for med in rx.get("medicines", [])
+                    if (med.get("name") or "").strip()
+                }
+
+                if doctor_key not in doctor_map:
+                    doctor_map[doctor_key] = {
+                        "doctor_name": doctor_name,
+                        "doctor_email": doctor_email,
+                        "medicines": set(),
+                    }
+                doctor_map[doctor_key]["medicines"].update(medicines)
+
+            associated_doctors = sorted(
+                doctor_map.values(),
+                key=lambda d: d["doctor_name"].lower(),
+            )
+
+            if not associated_doctors:
+                st.info("No care team members found yet.")
+            else:
+                for doctor in associated_doctors:
+                    doctor_name = escape(doctor["doctor_name"] or "Unknown doctor")
+                    doctor_email = escape(doctor["doctor_email"] or "Email not available")
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card">
+                            <p class="doctor-rx-name">{doctor_name}</p>
+                            <p class="doctor-rx-note">{doctor_email}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
     # Floating chatbot launcher for patient dashboard
     # Keep it hidden while the side menu is open so it does not block menu clicks.

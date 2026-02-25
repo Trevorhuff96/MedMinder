@@ -646,6 +646,22 @@ def load_custom_styles():
             border: 1px solid #cfe0ff !important;
         }
 
+        .patient-filter-title {
+            color: #ffffff !important;
+            text-align: left !important;
+            margin: 0.3rem 0 0.5rem 0 !important;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+
+        .patient-filter-label {
+            color: #d7e8ff !important;
+            font-size: 0.83rem;
+            font-weight: 700;
+            margin: 0 0 0.25rem 0 !important;
+            text-align: left !important;
+        }
+
         .patient-rx-diagnosis,
         .patient-rx-followup {
             color: #2e3d63;
