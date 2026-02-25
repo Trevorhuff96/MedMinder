@@ -256,3 +256,154 @@ def get_all_patients():
         {"patient_id": row[0], "name": row[1], "email": row[2]}
         for row in rows
     ]
+
+
+def get_user_profile(email):
+    """
+    Fetch user profile information by email.
+    
+    Args:
+        email: User email
+        
+    Returns:
+        dict: User profile data or None if not found
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Get user basic info
+    cursor.execute("SELECT name, role FROM users WHERE email = ?", (email,))
+    user_result = cursor.fetchone()
+    
+    if not user_result:
+        conn.close()
+        return None
+    
+    name, role = user_result
+    
+    # Get role-specific profile data
+    if role == "Doctor":
+        cursor.execute(
+            "SELECT dob, gender, phone, address, speciality, office_hours FROM doctors WHERE email = ?",
+            (email,)
+        )
+        profile_result = cursor.fetchone()
+        if profile_result:
+            return {
+                "name": name,
+                "email": email,
+                "role": role,
+                "dob": profile_result[0],
+                "gender": profile_result[1],
+                "phone": profile_result[2],
+                "address": profile_result[3],
+                "speciality": profile_result[4],
+                "office_hours": profile_result[5]
+            }
+    elif role == "Patient":
+        cursor.execute(
+            "SELECT dob, gender, phone, address FROM patients WHERE email = ?",
+            (email,)
+        )
+        profile_result = cursor.fetchone()
+        if profile_result:
+            return {
+                "name": name,
+                "email": email,
+                "role": role,
+                "dob": profile_result[0],
+                "gender": profile_result[1],
+                "phone": profile_result[2],
+                "address": profile_result[3]
+            }
+    
+    conn.close()
+    return None
+
+
+def update_user_profile(email, name=None, new_email=None, address=None):
+    """
+    Update user profile information.
+    
+    Args:
+        email: Current user email
+        name: New name (optional)
+        new_email: New email (optional)
+        address: New address (optional)
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    if new_email and not is_valid_email(new_email):
+        return False, "Invalid email format!"
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Get current user role first
+        cursor.execute("SELECT role FROM users WHERE email = ?", (email,))
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return False, "User not found!"
+        
+        role = result[0]
+        
+        # Update users table
+        if name and new_email:
+            cursor.execute(
+                "UPDATE users SET name = ?, email = ? WHERE email = ?",
+                (name, new_email, email)
+            )
+            updated_email = new_email
+        elif name:
+            cursor.execute(
+                "UPDATE users SET name = ? WHERE email = ?",
+                (name, email)
+            )
+            updated_email = email
+        elif new_email:
+            cursor.execute(
+                "UPDATE users SET email = ? WHERE email = ?",
+                (new_email, email)
+            )
+            updated_email = new_email
+        else:
+            updated_email = email
+        
+        # Update profile table with new address
+        if address is not None:
+            if role == "Doctor":
+                cursor.execute(
+                    "UPDATE doctors SET address = ? WHERE email = ?",
+                    (address, email)
+                )
+            elif role == "Patient":
+                cursor.execute(
+                    "UPDATE patients SET address = ? WHERE email = ?",
+                    (address, email)
+                )
+        
+        # If email changed, update profile table reference too
+        if new_email and new_email != email:
+            if role == "Doctor":
+                cursor.execute(
+                    "UPDATE doctors SET email = ? WHERE email = ?",
+                    (new_email, email)
+                )
+            elif role == "Patient":
+                cursor.execute(
+                    "UPDATE patients SET email = ? WHERE email = ?",
+                    (new_email, email)
+                )
+        
+        conn.commit()
+        return True, "Profile updated successfully!"
+        
+    except sqlite3.IntegrityError:
+        return False, "Email already in use by another account!"
+    except Exception as e:
+        return False, f"Error updating profile: {str(e)}"
+    finally:
+        conn.close()

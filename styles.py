@@ -970,6 +970,86 @@ def load_custom_styles():
         }
 
         
+        /* Side Drawer Menu */
+        .side-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 250px;
+            height: 100vh;
+            background: linear-gradient(135deg, #0B2F5B 0%, #0d3a78 100%);
+            z-index: 1000;
+            overflow-y: auto;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+            padding-top: 20px;
+        }
+        
+        .side-drawer.open {
+            transform: translateX(0);
+        }
+
+        .drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px 8px 16px;
+        }
+
+        .drawer-title {
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .drawer-close {
+            color: #ffffff;
+            text-decoration: none;
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+        
+        .drawer-item {
+            padding: 12px 20px;
+            color: #b0b8c4;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.95rem;
+            border-right: 3px solid transparent;
+            text-decoration: none;
+        }
+        
+        .drawer-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border-right-color: #0ca8e8;
+        }
+        
+        .drawer-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 10px 0;
+        }
+        
+        .drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 999;
+            display: none;
+        }
+        
+        .drawer-overlay.open {
+            display: block;
+        }
+        
         /* Reduce default Streamlit bottom padding */
         .block-container {
             padding-top: 2.5rem !important;

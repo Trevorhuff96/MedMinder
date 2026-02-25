@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from html import escape
 
 import streamlit as st
-from auth import authenticate_user, create_user, get_all_patients
+from auth import authenticate_user, create_user, get_all_patients, get_user_profile, update_user_profile
 from prescription import save_prescription, get_prescriptions_for_patient
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
@@ -466,9 +466,160 @@ def auth_page():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
+
+
+def init_menu_state():
+    """Initialize menu state in session"""
+    if "menu_open" not in st.session_state:
+        st.session_state.menu_open = False
+    if "show_appointments" not in st.session_state:
+        st.session_state.show_appointments = False
+
+
+def render_side_drawer():
+    """Render a side drawer menu with Profile, Appointments, and Logout"""
+    menu_open = st.session_state.get("menu_open", False)
+    
+    if menu_open:
+        # Create a container that will be positioned as drawer
+        st.markdown("""
+        <style>
+        .menu-overlay-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9998;
+            pointer-events: none;
+        }
+        /* Target the container holding our drawer */
+        div[data-testid="stVerticalBlock"]:has(.side-menu-container) {
+            position: fixed !important;
+            top: 0 !important;
+            right: 0 !important;
+            width: 300px !important;
+            height: 100vh !important;
+            background: linear-gradient(135deg, #0B2F5B 0%, #0d3a78 100%) !important;
+            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3) !important;
+            z-index: 9999 !important;
+            padding: 24px !important;
+            overflow-y: auto !important;
+        }
+        .side-menu-container {
+            width: 100%;
+        }
+        .side-menu-title {
+            color: #ffffff;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        div[data-testid="stVerticalBlock"]:has(.side-menu-container) button {
+            margin-bottom: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        div[data-testid="stVerticalBlock"]:has(.side-menu-container) button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Dark overlay background
+        st.markdown('<div class="menu-overlay-bg"></div>', unsafe_allow_html=True)
+        
+        # Create container for menu
+        with st.container():
+            st.markdown('<div class="side-menu-container">', unsafe_allow_html=True)
+            st.markdown('<div class="side-menu-title">Menu</div>', unsafe_allow_html=True)
+            
+            if st.button("✕ Close", key="drawer_close_btn", use_container_width=True):
+                st.session_state.menu_open = False
+                st.rerun()
+
+            if st.button("🏠 Dashboard", key="drawer_dashboard_btn", use_container_width=True):
+                st.session_state.show_profile_edit = False
+                st.session_state.show_appointments = False
+                st.session_state.show_prescription = False
+                st.session_state.menu_open = False
+                st.rerun()
+
+            if st.button("⚙️ Profile", key="drawer_profile_btn", use_container_width=True):
+                st.session_state.show_profile_edit = True
+                st.session_state.show_appointments = False
+                st.session_state.menu_open = False
+                st.rerun()
+
+            if st.button("📅 Appointment", key="drawer_appointment_btn", use_container_width=True):
+                st.session_state.show_appointments = True
+                st.session_state.show_profile_edit = False
+                st.session_state.menu_open = False
+                st.rerun()
+
+            if st.button("🚪 Log out", key="drawer_logout_btn", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.user_name = ""
+                st.session_state.user_email = ""
+                st.session_state.user_role = None
+                st.session_state.show_auth = False
+                st.session_state.show_signup = False
+                st.session_state.show_prescription = False
+                st.session_state.show_profile_edit = False
+                st.session_state.show_appointments = False
+                st.session_state.selected_patient = ""
+                st.session_state.selected_patient_id = None
+                st.session_state.menu_open = False
+                st.query_params.clear()
+                st.rerun()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+
+def appointments_page():
+    """Display appointments page for both doctors and patients."""
+    load_custom_styles()
+    init_menu_state()
+    render_side_drawer()
+
+    role = st.session_state.get("user_role", "")
+    title = "📅 Appointments"
+    
+    header_col1, header_col2 = st.columns([5.5, 0.5])
+    
+    with header_col1:
+        st.markdown(f"<h1 class='patient-welcome'>{title}</h1>", unsafe_allow_html=True)
+
+    with header_col2:
+        if st.button("☰", key="toggle_menu_appointments", help="Open menu"):
+            st.session_state.menu_open = not st.session_state.menu_open
+            st.rerun()
+    
+    st.markdown(
+        f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.get('user_email', '')} | "
+        f"<strong>Role:</strong> {role}</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+
+    if role == "Doctor":
+        st.subheader("Daily Schedule")
+        st.info("Your upcoming patient appointments will appear here.")
+    else:
+        st.subheader("My Appointments")
+        st.info("Your booked doctor appointments will appear here.")
+
+
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
     load_custom_styles()
+    init_menu_state()
+    render_side_drawer()
+    
     saved_notice = st.session_state.pop("prescription_saved_notice", None)
     if saved_notice:
         st.markdown(
@@ -476,15 +627,18 @@ def doctor_dashboard_page():
             unsafe_allow_html=True,
         )
 
-    header_col, logout_col = st.columns([6, 1.4])
-    with header_col:
+    header_col1, header_col2 = st.columns([5.5, 0.5])
+    
+    with header_col1:
         st.markdown(f"<h1 class='doctor-welcome'>🩺 Welcome back, Dr. {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
-    with logout_col:
-        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
-        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    with header_col2:
+        if st.button("☰", key="toggle_menu", help="Open menu"):
+            st.session_state.menu_open = not st.session_state.menu_open
+            st.rerun()
 
     st.markdown(f"<p class='doctor-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
+    
     st.markdown("---")
     
     # Doctor summary metrics
@@ -571,26 +725,27 @@ def doctor_dashboard_page():
                         st.rerun()
 
 
+
+
 def prescription_page():
     """Display prescription page for the selected patient."""
     load_custom_styles()
+    init_menu_state()
+    render_side_drawer()
 
-    header_col, logout_col = st.columns([6, 1.4])
-    with header_col:
+    header_col1, header_col2 = st.columns([5.5, 0.5])
+    
+    with header_col1:
         st.markdown("<h1 class='doctor-welcome'>💊 Create Prescription</h1>", unsafe_allow_html=True)
-    with logout_col:
-        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
-        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    with header_col2:
+        if st.button("☰", key="toggle_menu_prescription", help="Open menu"):
+            st.session_state.menu_open = not st.session_state.menu_open
+            st.rerun()
 
     patient_name = st.session_state.get("selected_patient", "Unknown Patient")
     st.markdown(f"<p class='doctor-account-role'><strong>Patient:</strong> {patient_name}</p>", unsafe_allow_html=True)
     st.markdown("---")
-
-    if st.button("< Back to Doctor Dashboard", key="back_to_doctor"):
-        st.session_state.show_prescription = False
-        st.session_state.selected_patient_id = None
-        st.rerun()
 
     st.markdown("<h2 class='rx-title'>Prescription Details</h2>", unsafe_allow_html=True)
     rx_left, rx_center, rx_right = st.columns([2, 4, 2])
@@ -701,16 +856,21 @@ def prescription_page():
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
     load_custom_styles()
+    init_menu_state()
+    render_side_drawer()
 
-    header_col, logout_col = st.columns([6, 1.4])
-    with header_col:
+    header_col1, header_col2 = st.columns([5.5, 0.5])
+    
+    with header_col1:
         st.markdown(f"<h1 class='patient-welcome'>👋 Welcome back, {st.session_state.user_name}!</h1>", unsafe_allow_html=True)
-    with logout_col:
-        st.markdown('<div class="patient-top-logout">', unsafe_allow_html=True)
-        st.markdown('<a class="patient-logout-link" href="?logout=1">Logout</a>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    with header_col2:
+        if st.button("☰", key="toggle_menu_patient", help="Open menu"):
+            st.session_state.menu_open = not st.session_state.menu_open
+            st.rerun()
 
     st.markdown(f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
+    
     st.markdown("---")
     
     # Patient summary metrics
@@ -817,4 +977,291 @@ def patient_dashboard_page():
         st.info("Secure messaging interface with care providers will go here.")
 
     # Floating chatbot launcher for patient dashboard
-    render_floating_chatbot()
+    # Keep it hidden while the side menu is open so it does not block menu clicks.
+    if not st.session_state.get("menu_open", False):
+        render_floating_chatbot()
+
+
+
+
+def profile_edit_page():
+    """Display profile details page, with optional edit mode."""
+    load_custom_styles()
+    init_menu_state()
+    render_side_drawer()
+
+    if "profile_edit_mode" not in st.session_state:
+        st.session_state.profile_edit_mode = False
+
+    def display_value(value):
+        return value if value not in (None, "", "None") else "Not provided"
+
+    header_col1, header_col2, header_col3 = st.columns([4.5, 1, 0.5])
+    
+    with header_col1:
+        st.markdown("<h1 class='patient-welcome'>👤 My Profile</h1>", unsafe_allow_html=True)
+
+    with header_col2:
+        if not st.session_state.profile_edit_mode:
+            if st.button("✏️ Edit Profile", key="open_profile_edit"):
+                st.session_state.profile_edit_mode = True
+                st.rerun()
+        else:
+            if st.button("❌ Cancel", key="cancel_profile_edit"):
+                st.session_state.profile_edit_mode = False
+                st.rerun()
+
+    with header_col3:
+        if st.button("☰", key="toggle_menu_profile", help="Open menu"):
+            st.session_state.menu_open = not st.session_state.menu_open
+            st.rerun()
+
+    current_email = st.session_state.get("user_email", "")
+    if not current_email:
+        st.error("No user email found in session. Please log in again.")
+        if st.button("< Back"):
+            st.session_state.show_profile_edit = False
+            st.rerun()
+        return
+
+    user_profile = get_user_profile(current_email)
+    if not user_profile:
+        st.error(f"Could not load profile information for {current_email}. Please try again.")
+        if st.button("< Back"):
+            st.session_state.show_profile_edit = False
+            st.rerun()
+        return
+
+    st.markdown(
+        f"<p class='patient-account-role'><strong>Account:</strong> {current_email} | "
+        f"<strong>Role:</strong> {user_profile['role']}</p>",
+        unsafe_allow_html=True,
+    )
+    
+    # Add subtle fade-in animation
+    st.markdown("""
+    <style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .profile-section-header, .profile-card {
+        animation: fadeIn 0.5s ease-out;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+
+    # Profile information cards with better styling
+    if not st.session_state.profile_edit_mode:
+        st.markdown("""
+        <style>
+        .profile-section-header {
+            background: linear-gradient(135deg, #0B2F5B 0%, #1a4d8f 100%);
+            border-radius: 12px 12px 0 0;
+            padding: 16px 24px;
+            margin-bottom: 0;
+        }
+        .profile-section-header h3 {
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        .profile-card {
+            background: white;
+            border-radius: 0 0 12px 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+            border: 1px solid #e8e8e8;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .profile-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+        }
+        .profile-field {
+            display: flex;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .profile-field:hover {
+            background: #e9ecef;
+        }
+        .profile-field:last-child {
+            margin-bottom: 0;
+        }
+        .profile-field-label {
+            color: #495057;
+            font-weight: 600;
+            min-width: 140px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+        }
+        .profile-field-label::before {
+            content: "•";
+            color: #0B2F5B;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+        .profile-field-value {
+            color: #212529;
+            font-weight: 400;
+            font-size: 0.9rem;
+            flex: 1;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            <div class="profile-section-header">
+                <h3>👤 Personal Information</h3>
+            </div>
+            <div class="profile-card">
+                <div class="profile-field">
+                    <div class="profile-field-label">Full Name</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Email</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Role</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Date of Birth</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Gender</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+            </div>
+            """.format(
+                display_value(user_profile.get('name')),
+                display_value(user_profile.get('email')),
+                display_value(user_profile.get('role')),
+                display_value(user_profile.get('dob')),
+                display_value(user_profile.get('gender'))
+            ), unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("""
+            <div class="profile-section-header">
+                <h3>📞 Contact Information</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Build contact information HTML
+            contact_fields = """
+            <div class="profile-card">
+                <div class="profile-field">
+                    <div class="profile-field-label">Phone</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Address</div>
+                    <div class="profile-field-value">{}</div>
+                </div>""".format(
+                display_value(user_profile.get('phone')),
+                display_value(user_profile.get('address'))
+            )
+            
+            # Add doctor-specific fields if applicable
+            if user_profile.get("role") == "Doctor":
+                contact_fields += """
+                <div class="profile-field">
+                    <div class="profile-field-label">Speciality</div>
+                    <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Office Hours</div>
+                    <div class="profile-field-value">{}</div>
+                </div>""".format(
+                    display_value(user_profile.get('speciality')),
+                    display_value(user_profile.get('office_hours'))
+                )
+            
+            contact_fields += """
+            </div>"""
+            
+            st.markdown(contact_fields, unsafe_allow_html=True)
+
+    if st.session_state.profile_edit_mode:
+        st.markdown("---")
+        
+        # Center the edit form
+        form_left, form_center, form_right = st.columns([1, 3, 1])
+        
+        with form_center:
+            st.markdown("<h3 style='text-align: center;'>✏️ Edit Profile Information</h3>", unsafe_allow_html=True)
+            
+            with st.form("profile_edit_form"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### Personal Details")
+                    new_name = st.text_input(
+                        "Full Name",
+                        value=user_profile.get("name", ""),
+                        placeholder="Enter your full name",
+                    )
+                    new_email = st.text_input(
+                        "Email",
+                        value=user_profile.get("email", ""),
+                        placeholder="Enter your email",
+                    )
+                
+                with col2:
+                    st.markdown("#### Contact Details")
+                    new_address = st.text_area(
+                        "Address",
+                        value=user_profile.get("address", ""),
+                        placeholder="Enter your complete address",
+                        height=137,
+                    )
+
+                submit = st.form_submit_button("💾 Save Changes", use_container_width=True, type="primary")
+
+                if submit:
+                    if not new_name or not new_name.strip():
+                        st.error("Name cannot be empty.")
+                        return
+                    if not new_email or not new_email.strip():
+                        st.error("Email cannot be empty.")
+                        return
+
+                    email_changed = new_email != current_email
+                    name_changed = new_name != user_profile.get("name", "")
+                    success, message = update_user_profile(
+                        current_email,
+                        name=new_name,
+                        new_email=new_email if email_changed else None,
+                        address=new_address,
+                    )
+
+                    if success:
+                        if name_changed:
+                            st.session_state.user_name = new_name
+                        if email_changed:
+                            st.session_state.user_email = new_email
+
+                        st.session_state.profile_edit_mode = False
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
