@@ -3,6 +3,7 @@ Reusable UI components for MedMinder pages.
 """
 
 import json
+import os
 from html import escape
 
 import streamlit as st
@@ -10,6 +11,14 @@ import streamlit.components.v1 as components
 from auth import get_specialities
 from prescription import get_prescriptions_for_patient
 from styles import get_chatbot_component_css
+
+
+def _get_secret_value(key: str, default: str = "") -> str:
+    """Safely read a Streamlit secret without requiring secrets.toml to exist."""
+    try:
+        return st.secrets[key]
+    except Exception:
+        return default
 
 
 def _build_prescription_summary(patient_email: str) -> str:
@@ -41,9 +50,18 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
     chatbot_css = get_chatbot_component_css()
     safe_name = escape((patient_name or "").strip())
     greeting = f"Hi {safe_name} 👋" if safe_name else "Hi 👋"
+    ollama_base_url = _get_secret_value("OLLAMA_BASE_URL") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    ollama_model = _get_secret_value("OLLAMA_MODEL") or os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    llm_system_prompt = (
+        "You are MedMinder Assistant. Give concise, helpful, safe health support. "
+        "Do not provide diagnosis. Encourage contacting a doctor for urgent symptoms."
+    )
     prescription_summary = _build_prescription_summary(patient_email or "")
     prescription_summary_json = json.dumps(prescription_summary)
     speciality_options_json = json.dumps(get_specialities())
+    ollama_base_url_json = json.dumps(ollama_base_url)
+    ollama_model_json = json.dumps(ollama_model)
+    llm_system_prompt_json = json.dumps(llm_system_prompt)
     components.html(
         """
         <!doctype html>
@@ -92,7 +110,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
                         <button
                             class="mm-chatbot-send"
                             type="button"
-                            onclick="const body=this.closest('.mm-chatbot-body'); const input=body.querySelector('.mm-chatbot-input'); const text=input.value.trim(); if (text) { appendUserMessage(this, text); input.value=''; }"
+                            onclick="handleSendMessage(this);"
                         >
                             Send
                         </button>
@@ -104,8 +122,12 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         <script>
         const rxSummary = __MM_RX_SUMMARY_JSON__;
         const specialityOptions = __MM_SPECIALITY_OPTIONS_JSON__;
+        const ollamaBaseUrl = __MM_OLLAMA_BASE_URL_JSON__;
+        const ollamaModel = __MM_OLLAMA_MODEL_JSON__;
+        const llmSystemPrompt = __MM_LLM_SYSTEM_PROMPT_JSON__;
+        const conversation = [];
 
-        function appendMessage(target, text, isUser, asHtml) {
+        function appendMessage(target, text, isUser, asHtml, storeInConversation = true) {
             const body = target.closest('.mm-chatbot-body');
             if (!body) return;
             const thread = body.querySelector('.mm-chatbot-thread');
@@ -119,14 +141,92 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
             }
             thread.appendChild(bubble);
             thread.scrollTop = thread.scrollHeight;
+            if (storeInConversation) {
+                conversation.push({
+                    role: isUser ? 'user' : 'assistant',
+                    content: text,
+                });
+            }
         }
 
         function appendUserMessage(target, text) {
             appendMessage(target, text, true, false);
         }
 
-        function appendBotMessage(target, text, asHtml) {
-            appendMessage(target, text, false, !!asHtml);
+        function appendBotMessage(target, text, asHtml, storeInConversation = true) {
+            appendMessage(target, text, false, !!asHtml, storeInConversation);
+        }
+
+        function appendTypingIndicator(target) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return null;
+            const thread = body.querySelector('.mm-chatbot-thread');
+            if (!thread) return null;
+            const bubble = document.createElement('p');
+            bubble.className = 'mm-chatbot-message';
+            bubble.textContent = '...';
+            thread.appendChild(bubble);
+            thread.scrollTop = thread.scrollHeight;
+            return bubble;
+        }
+
+        async function generateLlmReply(userText) {
+            if (!ollamaBaseUrl || !ollamaModel) {
+                return "I can help once LLM is configured. Please set OLLAMA_BASE_URL and OLLAMA_MODEL.";
+            }
+
+            const recentConversation = conversation.slice(-8);
+            const messages = [
+                { role: 'system', content: llmSystemPrompt },
+                ...recentConversation,
+                { role: 'user', content: userText },
+            ];
+
+            const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: ollamaModel,
+                    messages,
+                    stream: false,
+                    options: {
+                        temperature: 0.3,
+                    },
+                }),
+            });
+
+            if (!response.ok) {
+                return "I couldn't generate a response right now. Ensure Ollama is running and the model is pulled.";
+            }
+
+            const data = await response.json();
+            return data?.message?.content?.trim() || "I couldn't generate a response right now.";
+        }
+
+        async function handleUserInput(target, userText) {
+            appendUserMessage(target, userText);
+            const typingBubble = appendTypingIndicator(target);
+            try {
+                const llmReply = await generateLlmReply(userText);
+                if (typingBubble) typingBubble.remove();
+                appendBotMessage(target, llmReply, false);
+            } catch (error) {
+                if (typingBubble) typingBubble.remove();
+                appendBotMessage(target, "I couldn't generate a response right now. Please try again.", false);
+            }
+        }
+
+        async function handleSendMessage(target) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return;
+            const input = body.querySelector('.mm-chatbot-input');
+            if (!input) return;
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            await handleUserInput(target, text);
         }
 
         function appendSpecialityOptions(target) {
@@ -141,8 +241,8 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
                 optionBtn.type = 'button';
                 optionBtn.className = 'mm-chatbot-option';
                 optionBtn.textContent = speciality;
-                optionBtn.onclick = function () {
-                    appendUserMessage(optionBtn, speciality);
+                optionBtn.onclick = async function () {
+                    await handleUserInput(optionBtn, speciality);
                 };
                 optionsWrap.appendChild(optionBtn);
             });
@@ -177,7 +277,10 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         .replace("__MM_CHATBOT_COMPONENT_CSS__", chatbot_css)
         .replace("__MM_CHATBOT_GREETING__", greeting)
         .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json)
-        .replace("__MM_SPECIALITY_OPTIONS_JSON__", speciality_options_json),
+        .replace("__MM_SPECIALITY_OPTIONS_JSON__", speciality_options_json)
+        .replace("__MM_OLLAMA_BASE_URL_JSON__", ollama_base_url_json)
+        .replace("__MM_OLLAMA_MODEL_JSON__", ollama_model_json)
+        .replace("__MM_LLM_SYSTEM_PROMPT_JSON__", llm_system_prompt_json),
         height=520,
         scrolling=False,
     )
