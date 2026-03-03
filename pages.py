@@ -904,6 +904,181 @@ def prescription_page():
                 else:
                     st.error(message)
 
+def build_medication_schedule(prescriptions):
+    """
+    Build a daily medication schedule from prescriptions.
+    
+    Args:
+        prescriptions: List of prescription dicts with medicines array
+        
+    Returns:
+        dict: Keyed by time slot with list of medications for that time
+    """
+    # Extended time slots to accommodate various intervals
+    schedule = {
+        "8 AM": [],
+        "12 PM": [],
+        "2 PM": [],
+        "4 PM": [],
+        "6 PM": [],
+        "8 PM": [],
+        "10 PM": [],
+    }
+    
+    TIME_MAPPINGS = {
+        "Once daily": ["8 AM"],
+        "Twice daily": ["8 AM", "8 PM"],
+        "Three times daily": ["8 AM", "2 PM", "8 PM"],
+        "Four times daily": ["8 AM", "12 PM", "4 PM", "8 PM"],
+        "Before meals": ["8 AM", "12 PM", "6 PM"],
+        "After meals": ["8 AM", "12 PM", "6 PM"],
+        "At bedtime": ["10 PM"],
+        "With breakfast": ["8 AM"],
+        "With lunch": ["12 PM"],
+        "With dinner": ["6 PM"],
+    }
+    
+    for rx in prescriptions:
+        medicines = rx.get("medicines", [])
+        for med in medicines:
+            med_name = (med.get("name") or "").strip()
+            if not med_name:
+                continue
+            
+            frequency = (med.get("frequency") or "Once daily").strip()
+            dosage = (med.get("dosage") or "-").strip()
+            directions = (med.get("directions") or "").strip()
+            
+            # Determine which time slots this medicine should appear
+            times = TIME_MAPPINGS.get(frequency)
+            
+            # If not found, try to parse "Every X hours" pattern
+            if not times and "every" in frequency.lower():
+                import re
+                match = re.search(r'every\s+(\d+)\s+hours?', frequency, re.IGNORECASE)
+                if match:
+                    hours = int(match.group(1))
+                    # Calculate times starting from 8 AM
+                    times = []
+                    current_hour = 8
+                    while current_hour < 24:
+                        if current_hour < 12:
+                            times.append(f"{current_hour} AM")
+                        elif current_hour == 12:
+                            times.append("12 PM")
+                        else:
+                            times.append(f"{current_hour - 12} PM")
+                        current_hour += hours
+                    # Filter to only valid slots
+                    times = [t for t in times if t in schedule]
+            
+            # Default to morning only if still not found
+            if not times:
+                times = ["8 AM"]
+            
+            med_display = {
+                "name": med_name,
+                "dosage": dosage,
+                "frequency": frequency,
+                "directions": directions,
+            }
+            
+            for time_slot in times:
+                if time_slot in schedule:
+                    schedule[time_slot].append(med_display)
+    
+    return schedule
+
+def get_next_medication_dose(prescriptions):
+    """
+    Calculate the next medication dose based on current time and prescription schedule.
+    
+    Args:
+        prescriptions: List of prescription dicts
+        
+    Returns:
+        dict: {"time": "2 PM", "medication": "Lisinopril 10mg", "badge": "In 30 min"} or None
+    """
+    from datetime import datetime, timedelta
+    
+    if not prescriptions:
+        return None
+    
+    # Build the schedule
+    schedule = build_medication_schedule(prescriptions)
+    
+    # Map time slots to hour values for comparison
+    time_slot_hours = {
+        "8 AM": 8,
+        "12 PM": 12,
+        "2 PM": 14,
+        "4 PM": 16,
+        "6 PM": 18,
+        "8 PM": 20,
+        "10 PM": 22,
+    }
+    
+    # Get current time
+    now = datetime.now()
+    current_hour = now.hour
+    current_minute = now.minute
+    current_time_decimal = current_hour + current_minute / 60.0
+    
+    # Find the next scheduled medication
+    next_time = None
+    next_medications = []
+    
+    for time_slot in ["8 AM", "12 PM", "2 PM", "4 PM", "6 PM", "8 PM", "10 PM"]:
+        slot_hour = time_slot_hours[time_slot]
+        medications = schedule.get(time_slot, [])
+        
+        if medications and slot_hour >= current_time_decimal:
+            next_time = time_slot
+            next_medications = medications
+            break
+    
+    # If no medication found today, wrap to tomorrow's first dose
+    if not next_time:
+        for time_slot in ["8 AM", "12 PM", "2 PM", "4 PM", "6 PM", "8 PM", "10 PM"]:
+            medications = schedule.get(time_slot, [])
+            if medications:
+                next_time = time_slot
+                next_medications = medications
+                break
+    
+    if not next_medications:
+        return None
+    
+    # Pick the first medication for display
+    first_med = next_medications[0]
+    med_name = first_med["name"]
+    med_dosage = first_med["dosage"]
+    
+    # Calculate time difference for badge
+    slot_hour = time_slot_hours.get(next_time, 8)
+    time_diff_hours = slot_hour - current_time_decimal
+    
+    if time_diff_hours < 0:
+        # Tomorrow
+        time_diff_hours += 24
+        badge = "Tomorrow"
+    elif time_diff_hours < 1:
+        minutes = int(time_diff_hours * 60)
+        badge = f"In {minutes} min" if minutes > 0 else "Now"
+    elif time_diff_hours < 2:
+        badge = "In 1 hour"
+    elif time_diff_hours < 24:
+        hours = int(time_diff_hours)
+        badge = f"In {hours} hours"
+    else:
+        badge = "Tomorrow"
+    
+    return {
+        "time": next_time,
+        "medication": f"{med_name} {med_dosage}",
+        "badge": badge,
+    }
+
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
     load_custom_styles()
@@ -924,14 +1099,29 @@ def patient_dashboard_page():
     
     st.markdown("---")
     
+    # Get prescriptions for calculations
+    patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
+    
+    # Calculate next dose dynamically
+    next_dose_info = get_next_medication_dose(patient_prescriptions)
+    
+    if next_dose_info:
+        next_dose_time = next_dose_info["time"]
+        next_dose_med = next_dose_info["medication"]
+        next_dose_badge = next_dose_info["badge"]
+    else:
+        next_dose_time = "—"
+        next_dose_med = "No medications scheduled"
+        next_dose_badge = ""
+    
     # Patient summary metrics
     metrics = [
         {
             "icon": "⏰",
             "label": "Next Dose",
-            "value": "2:00 PM",
-            "detail": "Lisinopril 10mg",
-            "badge": "Today",
+            "value": next_dose_time,
+            "detail": next_dose_med,
+            "badge": next_dose_badge,
         },
         {
             "icon": "📈",
@@ -968,8 +1158,6 @@ def patient_dashboard_page():
             )
     
     st.markdown("<br>", unsafe_allow_html=True)
-
-    patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
     
     # Patient Specific Tabs
     tab1, tab2, tab3 = st.tabs(["💊 My Medications", "🔔 Reminders", "🩺 Care Team"])
@@ -1071,7 +1259,7 @@ def patient_dashboard_page():
                         directions = escape(str(med.get("directions") or "-"))
                         med_lines.append(
                             f"<li><span class='patient-med-name'>{med_name}</span>"
-                            f"<span class='patient-med-meta'>Dosage: {dosage} • Frequency: {frequency} • Days: {days}</span>"
+                            f"<span class='patient-med-meta'>Dosage: {dosage}, Frequency: {frequency}, Days: {days}</span>"
                             f"<span class='patient-med-dir'>Directions: {directions}</span></li>"
                         )
                 else:
@@ -1097,7 +1285,79 @@ def patient_dashboard_page():
         
     with tab2:
         st.subheader("Medication Schedule")
-        st.info("Daily timeline of when to take medications will go here.")
+        if not patient_prescriptions:
+            st.info("No prescriptions found. Your medication schedule will appear here once you receive prescriptions.")
+        else:
+            medication_schedule = build_medication_schedule(patient_prescriptions)
+            
+            st.markdown("""
+            <style>
+            .med-schedule-card {
+                background: #f8f9fa;
+                border-left: 4px solid #26c485;
+                padding: 16px;
+                margin: 12px 0;
+                border-radius: 4px;
+            }
+            .med-schedule-time {
+                font-size: 16px;
+                font-weight: 600;
+                color: #0d47a1;
+                margin-bottom: 12px;
+            }
+            .med-item {
+                background: white;
+                padding: 10px 12px;
+                margin: 6px 0;
+                border-radius: 4px;
+                border-left: 3px solid #e0e0e0;
+                font-size: 14px;
+            }
+            .med-name {
+                font-weight: 600;
+                color: #1a1a1a;
+                display: block;
+                margin-bottom: 4px;
+            }
+            .med-detail {
+                color: #666;
+                font-size: 13px;
+                margin: 4px 0;
+                display: block;
+                line-height: 1.5;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # Display timeline
+            has_medications = False
+            for time_slot, medications in medication_schedule.items():
+                if medications:
+                    has_medications = True
+                    
+                    # Build HTML for this time slot
+                    med_items_html = ""
+                    for med in medications:
+                        med_name = escape(med["name"])
+                        med_dosage = escape(med["dosage"])
+                        med_frequency = escape(med["frequency"])
+                        med_directions = escape(med["directions"]) if med["directions"] else ""
+                        
+                        med_items_html += f"""<div class="med-item">
+                            <span class="med-name">{med_name}</span>
+                            <span class="med-detail"><strong>Dosage:</strong> {med_dosage}</span>
+                            <span class="med-detail"><strong>Frequency:</strong> {med_frequency}</span>"""
+                        if med_directions:
+                            med_items_html += f"""<span class="med-detail"><strong>Directions:</strong> {med_directions}</span>"""
+                        med_items_html += """</div>"""
+                    
+                    st.markdown(f"""<div class="med-schedule-card">
+                        <div class="med-schedule-time">{time_slot}</div>
+                        {med_items_html}
+                    </div>""", unsafe_allow_html=True)
+            
+            if not has_medications:
+                st.info("No active medications to display in schedule.")
         
     with tab3:
         st.subheader("Care Team")
