@@ -22,11 +22,17 @@ def sync_browser_route(route: str) -> None:
             const parentWin = window.parent;
             if (!parentWin || !parentWin.location || !parentWin.history) return;
             const currentPath = parentWin.location.pathname || "/";
-            const currentSearch = parentWin.location.search || "";
+            const searchParams = new URLSearchParams(parentWin.location.search || "");
+            if ("{route}" !== "appointments") {{
+                searchParams.delete("doctor_email");
+            }}
+            const currentSearch = searchParams.toString() ? `?${{searchParams.toString()}}` : "";
             const currentHash = parentWin.location.hash || "";
             const targetPath = "{target_path}";
             if (currentPath !== targetPath) {{
                 parentWin.history.replaceState({{}}, "", targetPath + currentSearch + currentHash);
+            }} else if ((parentWin.location.search || "") !== currentSearch) {{
+                parentWin.history.replaceState({{}}, "", currentPath + currentSearch + currentHash);
             }}
         }})();
         </script>
@@ -64,12 +70,22 @@ def run_app():
         st.session_state.show_profile_edit = False
     if 'show_appointments' not in st.session_state:
         st.session_state.show_appointments = False
+    if 'appointment_doctor_email' not in st.session_state:
+        st.session_state.appointment_doctor_email = ""
     if 'selected_patient' not in st.session_state:
         st.session_state.selected_patient = ""
     if 'selected_patient_id' not in st.session_state:
         st.session_state.selected_patient_id = None
     if 'menu_open' not in st.session_state:
         st.session_state.menu_open = False
+
+    # Restore minimal auth context across full page reloads.
+    logged_in_param = st.query_params.get("logged_in")
+    if not st.session_state.logged_in and logged_in_param == "1":
+        st.session_state.logged_in = True
+        st.session_state.user_name = st.query_params.get("user_name", "")
+        st.session_state.user_email = st.query_params.get("user_email", "")
+        st.session_state.user_role = st.query_params.get("user_role", None)
 
     # Query-param logout hook for top logout links
     logout_param = st.query_params.get("logout")
@@ -89,6 +105,13 @@ def run_app():
         st.query_params.clear()
         st.rerun()
         st.stop()
+
+    appointment_doctor_email = st.query_params.get("doctor_email")
+    if st.session_state.logged_in and appointment_doctor_email:
+        st.session_state.show_appointments = True
+        st.session_state.show_profile_edit = False
+        st.session_state.show_prescription = False
+        st.session_state.appointment_doctor_email = appointment_doctor_email
 
     # Main App Logic - Route to appropriate page
     if st.session_state.logged_in:

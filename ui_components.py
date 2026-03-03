@@ -8,7 +8,7 @@ from html import escape
 
 import streamlit as st
 import streamlit.components.v1 as components
-from auth import get_specialities
+from auth import get_doctors_by_speciality, get_specialities
 from prescription import get_prescriptions_for_patient
 from styles import get_chatbot_component_css
 
@@ -45,6 +45,64 @@ def _build_prescription_summary(patient_email: str) -> str:
     return "Here is your latest prescription summary:<br>" + "<br>".join(summary_lines)
 
 
+def _build_symptom_speciality_map():
+    """Return symptom keywords used to suggest a speciality."""
+    return {
+        "Cardiologist": [
+            "chest pain",
+            "heart",
+            "palpitation",
+            "palpitations",
+            "blood pressure",
+            "hypertension",
+            "shortness of breath",
+            "breathless",
+        ],
+        "Dentist": [
+            "tooth",
+            "teeth",
+            "gum",
+            "gums",
+            "jaw pain",
+            "cavity",
+            "toothache",
+            "oral",
+        ],
+        "Neurologist": [
+            "headache",
+            "migraine",
+            "seizure",
+            "dizziness",
+            "numbness",
+            "tingling",
+            "memory",
+            "nerve",
+            "brain",
+        ],
+        "Pediatrician": [
+            "child",
+            "kid",
+            "baby",
+            "infant",
+            "toddler",
+            "newborn",
+            "son",
+            "daughter",
+        ],
+        "General Practitioner": [
+            "fever",
+            "cold",
+            "cough",
+            "flu",
+            "infection",
+            "pain",
+            "fatigue",
+            "sore throat",
+            "body ache",
+        ],
+    }
+
+
 def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> None:
     """Render a floating chatbot launcher and greeting panel."""
     chatbot_css = get_chatbot_component_css()
@@ -58,7 +116,26 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
     )
     prescription_summary = _build_prescription_summary(patient_email or "")
     prescription_summary_json = json.dumps(prescription_summary)
-    speciality_options_json = json.dumps(get_specialities())
+    speciality_options = get_specialities()
+    speciality_options_json = json.dumps(speciality_options)
+    doctors_by_speciality = {
+        speciality: [
+            {
+                "name": escape(str(doctor.get("name") or "").strip()),
+                "email": escape(str(doctor.get("email") or "").strip()),
+                "speciality": escape(str(doctor.get("speciality") or "").strip()),
+            }
+            for doctor in get_doctors_by_speciality(speciality)
+        ]
+        for speciality in speciality_options
+    }
+    doctors_by_speciality_json = json.dumps(doctors_by_speciality)
+    symptom_speciality_map = {
+        speciality: keywords
+        for speciality, keywords in _build_symptom_speciality_map().items()
+        if speciality in speciality_options
+    }
+    symptom_speciality_map_json = json.dumps(symptom_speciality_map)
     ollama_base_url_json = json.dumps(ollama_base_url)
     ollama_model_json = json.dumps(ollama_model)
     llm_system_prompt_json = json.dumps(llm_system_prompt)
@@ -122,10 +199,13 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         <script>
         const rxSummary = __MM_RX_SUMMARY_JSON__;
         const specialityOptions = __MM_SPECIALITY_OPTIONS_JSON__;
+        const doctorsBySpeciality = __MM_DOCTORS_BY_SPECIALITY_JSON__;
+        const symptomSpecialityMap = __MM_SYMPTOM_SPECIALITY_MAP_JSON__;
         const ollamaBaseUrl = __MM_OLLAMA_BASE_URL_JSON__;
         const ollamaModel = __MM_OLLAMA_MODEL_JSON__;
         const llmSystemPrompt = __MM_LLM_SYSTEM_PROMPT_JSON__;
         const conversation = [];
+        let awaitingSymptomInput = false;
 
         function appendMessage(target, text, isUser, asHtml, storeInConversation = true) {
             const body = target.closest('.mm-chatbot-body');
@@ -155,6 +235,38 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
 
         function appendBotMessage(target, text, asHtml, storeInConversation = true) {
             appendMessage(target, text, false, !!asHtml, storeInConversation);
+        }
+
+        function navigateToAppointment(doctorEmail) {
+            const parentWin = window.parent;
+            if (!parentWin || !parentWin.location || !parentWin.history) return;
+            const currentPath = parentWin.location.pathname || "/";
+            const params = new URLSearchParams(parentWin.location.search || "");
+            params.set("doctor_email", doctorEmail || "");
+            parentWin.history.replaceState({}, "", `${currentPath}?${params.toString()}`);
+            parentWin.location.reload();
+        }
+
+        function appendDoctorButtons(target, doctors) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return;
+            const thread = body.querySelector('.mm-chatbot-thread');
+            if (!thread || !Array.isArray(doctors) || doctors.length === 0) return;
+
+            const optionsWrap = document.createElement('div');
+            optionsWrap.className = 'mm-chatbot-options';
+
+            doctors.forEach((doctor) => {
+                const doctorBtn = document.createElement('button');
+                doctorBtn.type = 'button';
+                doctorBtn.className = 'mm-chatbot-option';
+                doctorBtn.textContent = doctor.name;
+                doctorBtn.addEventListener('click', () => navigateToAppointment(doctor.email));
+                optionsWrap.appendChild(doctorBtn);
+            });
+
+            thread.appendChild(optionsWrap);
+            thread.scrollTop = thread.scrollHeight;
         }
 
         function appendTypingIndicator(target) {
@@ -207,6 +319,11 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
 
         async function handleUserInput(target, userText) {
             appendUserMessage(target, userText);
+            if (awaitingSymptomInput) {
+                awaitingSymptomInput = false;
+                await suggestSpecialityFromSymptoms(target, userText);
+                return;
+            }
             const typingBubble = appendTypingIndicator(target);
             try {
                 const llmReply = await generateLlmReply(userText);
@@ -229,31 +346,116 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
             await handleUserInput(target, text);
         }
 
-        function appendSpecialityOptions(target) {
-            const body = target.closest('.mm-chatbot-body');
-            if (!body) return;
-            const thread = body.querySelector('.mm-chatbot-thread');
-            if (!thread || !Array.isArray(specialityOptions) || specialityOptions.length === 0) return;
-            const optionsWrap = document.createElement('div');
-            optionsWrap.className = 'mm-chatbot-options';
-            specialityOptions.forEach((speciality) => {
-                const optionBtn = document.createElement('button');
-                optionBtn.type = 'button';
-                optionBtn.className = 'mm-chatbot-option';
-                optionBtn.textContent = speciality;
-                optionBtn.onclick = async function () {
-                    await handleUserInput(optionBtn, speciality);
-                };
-                optionsWrap.appendChild(optionBtn);
+        function findSuggestedSpeciality(symptomsText) {
+            const normalizedText = (symptomsText || '').toLowerCase();
+            let bestMatch = '';
+            let bestScore = 0;
+
+            Object.entries(symptomSpecialityMap).forEach(([speciality, keywords]) => {
+                let score = 0;
+                keywords.forEach((keyword) => {
+                    if (normalizedText.includes(keyword.toLowerCase())) {
+                        score += keyword.includes(' ') ? 2 : 1;
+                    }
+                });
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = speciality;
+                }
             });
-            thread.appendChild(optionsWrap);
-            thread.scrollTop = thread.scrollHeight;
+
+            if (bestMatch && bestScore >= 2) {
+                return { speciality: bestMatch, confident: true };
+            }
+
+            if (specialityOptions.includes('General Practitioner')) {
+                return { speciality: 'General Practitioner', confident: false };
+            }
+
+            return { speciality: specialityOptions[0] || 'a doctor', confident: false };
+        }
+
+        async function suggestSpecialityWithLlm(symptomsText) {
+            if (!ollamaBaseUrl || !ollamaModel || !Array.isArray(specialityOptions) || specialityOptions.length === 0) {
+                return null;
+            }
+
+            const response = await fetch(`${ollamaBaseUrl}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: ollamaModel,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You route patient symptoms to one best doctor speciality. Reply with exactly one speciality from the allowed list.',
+                        },
+                        {
+                            role: 'user',
+                            content: `Allowed specialities: ${specialityOptions.join(', ')}\nSymptoms: ${symptomsText}\nReply with only one speciality name from the allowed list.`,
+                        },
+                    ],
+                    stream: false,
+                    options: {
+                        temperature: 0.1,
+                    },
+                }),
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const data = await response.json();
+            const reply = (data?.message?.content || '').trim().toLowerCase();
+            return specialityOptions.find((speciality) => {
+                const normalized = speciality.toLowerCase();
+                return reply === normalized || reply.includes(normalized);
+            }) || null;
+        }
+
+        async function suggestSpecialityFromSymptoms(target, symptomsText) {
+            const matchResult = findSuggestedSpeciality(symptomsText);
+            let speciality = matchResult.speciality;
+
+            if (!matchResult.confident) {
+                try {
+                    const llmSpeciality = await suggestSpecialityWithLlm(symptomsText);
+                    if (llmSpeciality) {
+                        speciality = llmSpeciality;
+                    }
+                } catch (error) {
+                    // Keep deterministic fallback if LLM routing fails.
+                }
+            }
+
+            const matchedDoctors = Array.isArray(doctorsBySpeciality[speciality])
+                ? doctorsBySpeciality[speciality]
+                : [];
+            let replyHtml = `Based on the symptoms you shared, I suggest booking an appointment with a <strong>${speciality}</strong>.`;
+
+            if (matchedDoctors.length > 0) {
+                replyHtml += `<br><br>Available doctors:`;
+            } else {
+                replyHtml += `<br><br>No doctors are currently available in that speciality.`;
+            }
+
+            appendBotMessage(
+                target,
+                replyHtml,
+                true,
+            );
+            if (matchedDoctors.length > 0) {
+                appendDoctorButtons(target, matchedDoctors);
+            }
         }
 
         function handleBookAppointment(target) {
             appendUserMessage(target, 'Book Appointment');
-            appendBotMessage(target, 'What speciality are you looking for?', false);
-            appendSpecialityOptions(target);
+            awaitingSymptomInput = true;
+            appendBotMessage(target, 'What specific symptoms are you experiencing?', false);
         }
 
         (function () {
@@ -278,6 +480,8 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         .replace("__MM_CHATBOT_GREETING__", greeting)
         .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json)
         .replace("__MM_SPECIALITY_OPTIONS_JSON__", speciality_options_json)
+        .replace("__MM_DOCTORS_BY_SPECIALITY_JSON__", doctors_by_speciality_json)
+        .replace("__MM_SYMPTOM_SPECIALITY_MAP_JSON__", symptom_speciality_map_json)
         .replace("__MM_OLLAMA_BASE_URL_JSON__", ollama_base_url_json)
         .replace("__MM_OLLAMA_MODEL_JSON__", ollama_model_json)
         .replace("__MM_LLM_SYSTEM_PROMPT_JSON__", llm_system_prompt_json),

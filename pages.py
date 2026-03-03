@@ -10,6 +10,7 @@ from auth import (
     authenticate_user,
     create_user,
     get_all_patients,
+    get_doctor_by_email,
     get_specialities,
     get_user_profile,
     update_user_profile,
@@ -440,6 +441,10 @@ def auth_page():
                             st.session_state.user_role = result["role"]
                             st.session_state.user_email = email
                             st.session_state.show_signup = False
+                            st.query_params["logged_in"] = "1"
+                            st.query_params["user_name"] = result["name"]
+                            st.query_params["user_role"] = result["role"]
+                            st.query_params["user_email"] = email
                             st.success(f"Login successful! Welcome, {result['name']}.")
                             st.rerun()
                         else:
@@ -554,18 +559,26 @@ def render_side_drawer():
                 st.session_state.show_profile_edit = False
                 st.session_state.show_appointments = False
                 st.session_state.show_prescription = False
+                st.session_state.appointment_doctor_email = ""
+                if "doctor_email" in st.query_params:
+                    del st.query_params["doctor_email"]
                 st.session_state.menu_open = False
                 st.rerun()
 
             if st.button("⚙️ Profile", key="drawer_profile_btn", use_container_width=True):
                 st.session_state.show_profile_edit = True
                 st.session_state.show_appointments = False
+                st.session_state.show_prescription = False
+                st.session_state.appointment_doctor_email = ""
+                if "doctor_email" in st.query_params:
+                    del st.query_params["doctor_email"]
                 st.session_state.menu_open = False
                 st.rerun()
 
             if st.button("📅 Appointment", key="drawer_appointment_btn", use_container_width=True):
                 st.session_state.show_appointments = True
                 st.session_state.show_profile_edit = False
+                st.session_state.show_prescription = False
                 st.session_state.menu_open = False
                 st.rerun()
 
@@ -579,6 +592,7 @@ def render_side_drawer():
                 st.session_state.show_prescription = False
                 st.session_state.show_profile_edit = False
                 st.session_state.show_appointments = False
+                st.session_state.appointment_doctor_email = ""
                 st.session_state.selected_patient = ""
                 st.session_state.selected_patient_id = None
                 st.session_state.menu_open = False
@@ -619,7 +633,36 @@ def appointments_page():
         st.info("Your upcoming patient appointments will appear here.")
     else:
         st.subheader("My Appointments")
-        st.info("Your booked doctor appointments will appear here.")
+        selected_doctor = None
+        selected_doctor_email = st.session_state.get("appointment_doctor_email", "")
+        if selected_doctor_email:
+            selected_doctor = get_doctor_by_email(selected_doctor_email)
+
+        if selected_doctor:
+            doctor_name = escape(selected_doctor.get("name") or "Selected Doctor")
+            doctor_email = escape(selected_doctor.get("email") or "")
+            doctor_speciality = escape(selected_doctor.get("speciality") or "Not specified")
+            office_hours = escape(selected_doctor.get("office_hours") or "Not available")
+            st.markdown(
+                f"""
+                <div class="doctor-rx-card">
+                    <p class="doctor-rx-name">{doctor_name}</p>
+                    <p class="doctor-rx-note"><strong>Speciality:</strong> {doctor_speciality}</p>
+                    <p class="doctor-rx-note"><strong>Email:</strong> {doctor_email}</p>
+                    <p class="doctor-rx-note"><strong>Office Hours:</strong> {office_hours}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            preferred_date = st.date_input("Preferred appointment date")
+            booking_note = st.text_area(
+                "Notes for the doctor",
+                placeholder="Add symptoms or anything you want the doctor to know",
+            )
+            if st.button("Request Appointment", key="request_appointment_btn"):
+                st.success(f"Appointment request sent to {doctor_name}.")
+        else:
+            st.info("Your booked doctor appointments will appear here.")
 
 
 def doctor_dashboard_page():
