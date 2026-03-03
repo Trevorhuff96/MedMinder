@@ -158,6 +158,40 @@ def get_specialities():
     conn.close()
     return [row[0] for row in rows]
 
+
+def get_doctors_by_speciality():
+    """Fetch available doctors grouped by speciality for appointment discovery."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT
+            TRIM(COALESCE(d.speciality, '')) AS speciality,
+            TRIM(COALESCE(u.name, '')) AS doctor_name,
+            TRIM(COALESCE(d.email, '')) AS doctor_email,
+            TRIM(COALESCE(d.office_hours, '')) AS office_hours
+        FROM doctors d
+        JOIN users u ON u.email = d.email
+        WHERE u.role = 'Doctor'
+          AND TRIM(COALESCE(d.speciality, '')) <> ''
+        ORDER BY speciality COLLATE NOCASE ASC, doctor_name COLLATE NOCASE ASC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    doctors_by_speciality = {}
+    for speciality, doctor_name, doctor_email, office_hours in rows:
+        doctors_by_speciality.setdefault(speciality, []).append(
+            {
+                "name": doctor_name or "Unknown doctor",
+                "email": doctor_email,
+                "office_hours": office_hours,
+            }
+        )
+
+    return doctors_by_speciality
+
 def is_valid_email(email: str) -> bool:
     """
     Validate email format using regex

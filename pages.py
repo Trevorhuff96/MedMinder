@@ -1028,7 +1028,7 @@ def patient_dashboard_page():
                         directions = escape(str(med.get("directions") or "-"))
                         med_lines.append(
                             f"<li><span class='patient-med-name'>{med_name}</span>"
-                            f"<span class='patient-med-meta'>Dosage: {dosage} • Frequency: {frequency} • Days: {days}</span>"
+                            f"<span class='patient-med-meta'>Dosage: {dosage}, Frequency: {frequency}, Days: {days}</span>"
                             f"<span class='patient-med-dir'>Directions: {directions}</span></li>"
                         )
                 else:

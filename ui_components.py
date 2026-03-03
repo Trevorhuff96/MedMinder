@@ -8,7 +8,7 @@ from html import escape
 
 import streamlit as st
 import streamlit.components.v1 as components
-from auth import get_specialities
+from auth import get_specialities, get_doctors_by_speciality
 from prescription import get_prescriptions_for_patient
 from styles import get_chatbot_component_css
 
@@ -35,14 +35,20 @@ def _build_prescription_summary(patient_email: str) -> str:
             continue
         dosage = escape(str(med.get("dosage") or "-").strip())
         frequency = escape(str(med.get("frequency") or "-").strip())
+        days = escape(str(med.get("days") or "-").strip())
+        directions = escape(str(med.get("directions") or "-").strip())
         summary_lines.append(
-            f"<strong>{med_name}</strong>: Dosage {dosage}, Frequency {frequency}"
+            f"<strong>Medicine:</strong> {med_name}, "
+            f"<strong>Dosage:</strong> {dosage}, "
+            f"<strong>Frequency:</strong> {frequency}, "
+            f"<strong>Days:</strong> {days}, "
+            f"<strong>Directions:</strong> {directions}."
         )
 
     if not summary_lines:
         return "I found your prescription, but medicine details are not available."
 
-    return "Here is your latest prescription summary:<br>" + "<br>".join(summary_lines)
+    return "Here is your latest prescription summary:<br>" + "<br><br>".join(summary_lines)
 
 
 def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> None:
@@ -59,6 +65,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
     prescription_summary = _build_prescription_summary(patient_email or "")
     prescription_summary_json = json.dumps(prescription_summary)
     speciality_options_json = json.dumps(get_specialities())
+    doctors_by_speciality_json = json.dumps(get_doctors_by_speciality())
     ollama_base_url_json = json.dumps(ollama_base_url)
     ollama_model_json = json.dumps(ollama_model)
     llm_system_prompt_json = json.dumps(llm_system_prompt)
@@ -122,6 +129,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         <script>
         const rxSummary = __MM_RX_SUMMARY_JSON__;
         const specialityOptions = __MM_SPECIALITY_OPTIONS_JSON__;
+        const doctorsBySpeciality = __MM_DOCTORS_BY_SPECIALITY_JSON__;
         const ollamaBaseUrl = __MM_OLLAMA_BASE_URL_JSON__;
         const ollamaModel = __MM_OLLAMA_MODEL_JSON__;
         const llmSystemPrompt = __MM_LLM_SYSTEM_PROMPT_JSON__;
@@ -241,13 +249,67 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
                 optionBtn.type = 'button';
                 optionBtn.className = 'mm-chatbot-option';
                 optionBtn.textContent = speciality;
-                optionBtn.onclick = async function () {
-                    await handleUserInput(optionBtn, speciality);
+                optionBtn.onclick = function () {
+                    handleSpecialitySelection(optionBtn, speciality);
                 };
                 optionsWrap.appendChild(optionBtn);
             });
             thread.appendChild(optionsWrap);
             thread.scrollTop = thread.scrollHeight;
+        }
+
+        function appendDoctorOptions(target, speciality) {
+            const body = target.closest('.mm-chatbot-body');
+            if (!body) return;
+            const thread = body.querySelector('.mm-chatbot-thread');
+            if (!thread) return;
+
+            const doctors = Array.isArray(doctorsBySpeciality?.[speciality])
+                ? doctorsBySpeciality[speciality]
+                : [];
+
+            if (doctors.length === 0) {
+                appendBotMessage(target, `No available doctors found for ${speciality} yet.`, false);
+                return;
+            }
+
+            appendBotMessage(target, `Available ${speciality} doctors:`, false);
+
+            const optionsWrap = document.createElement('div');
+            optionsWrap.className = 'mm-chatbot-options';
+
+            doctors.forEach((doctor) => {
+                const doctorName = (doctor?.name || 'Unknown doctor').trim() || 'Unknown doctor';
+                const doctorEmail = (doctor?.email || '').trim();
+                const officeHours = (doctor?.office_hours || '').trim();
+
+                const optionBtn = document.createElement('button');
+                optionBtn.type = 'button';
+                optionBtn.className = 'mm-chatbot-option';
+                optionBtn.textContent = doctorName;
+                optionBtn.onclick = function () {
+                    appendUserMessage(optionBtn, doctorName);
+
+                    let details = `${doctorName}`;
+                    if (doctorEmail) {
+                        details += ` • ${doctorEmail}`;
+                    }
+                    if (officeHours) {
+                        details += ` • Office hours: ${officeHours}`;
+                    }
+                    appendBotMessage(optionBtn, details, false);
+                };
+
+                optionsWrap.appendChild(optionBtn);
+            });
+
+            thread.appendChild(optionsWrap);
+            thread.scrollTop = thread.scrollHeight;
+        }
+
+        function handleSpecialitySelection(target, speciality) {
+            appendUserMessage(target, speciality);
+            appendDoctorOptions(target, speciality);
         }
 
         function handleBookAppointment(target) {
@@ -278,6 +340,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         .replace("__MM_CHATBOT_GREETING__", greeting)
         .replace("__MM_RX_SUMMARY_JSON__", prescription_summary_json)
         .replace("__MM_SPECIALITY_OPTIONS_JSON__", speciality_options_json)
+        .replace("__MM_DOCTORS_BY_SPECIALITY_JSON__", doctors_by_speciality_json)
         .replace("__MM_OLLAMA_BASE_URL_JSON__", ollama_base_url_json)
         .replace("__MM_OLLAMA_MODEL_JSON__", ollama_model_json)
         .replace("__MM_LLM_SYSTEM_PROMPT_JSON__", llm_system_prompt_json),
