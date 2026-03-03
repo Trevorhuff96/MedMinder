@@ -329,6 +329,73 @@ def get_all_patients():
     ]
 
 
+def get_doctors_by_speciality(speciality):
+    """
+    Fetch doctors matching a speciality.
+
+    Returns:
+        list[dict]: [{name, email, speciality}, ...]
+    """
+    if not speciality or not str(speciality).strip():
+        return []
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT u.name, u.email, d.speciality
+        FROM doctors d
+        JOIN users u ON u.email = d.email
+        WHERE u.role = 'Doctor' AND d.speciality = ?
+        ORDER BY u.name COLLATE NOCASE ASC
+        """,
+        (str(speciality).strip(),),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {"name": row[0], "email": row[1], "speciality": row[2]}
+        for row in rows
+    ]
+
+
+def get_doctor_by_email(email):
+    """
+    Fetch a single doctor by email.
+
+    Returns:
+        dict | None: {name, email, speciality, office_hours}
+    """
+    if not email or not str(email).strip():
+        return None
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT u.name, u.email, d.speciality, d.office_hours
+        FROM doctors d
+        JOIN users u ON u.email = d.email
+        WHERE u.role = 'Doctor' AND u.email = ?
+        LIMIT 1
+        """,
+        (str(email).strip(),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "name": row[0],
+        "email": row[1],
+        "speciality": row[2],
+        "office_hours": row[3],
+    }
+
+
 def get_user_profile(email):
     """
     Fetch user profile information by email.
