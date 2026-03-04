@@ -4,6 +4,7 @@ Reusable UI components for MedMinder pages.
 
 import json
 import os
+from pathlib import Path
 from html import escape
 
 import streamlit as st
@@ -14,9 +15,17 @@ from styles import get_chatbot_component_css
 
 
 def _get_secret_value(key: str, default: str = "") -> str:
-    """Safely read a Streamlit secret without requiring secrets.toml to exist."""
+    """Read a Streamlit secret only when a secrets.toml file exists."""
+    secrets_paths = [
+        Path.home() / ".streamlit" / "secrets.toml",
+        Path.cwd() / ".streamlit" / "secrets.toml",
+    ]
+
+    if not any(path.exists() for path in secrets_paths):
+        return default
+
     try:
-        return st.secrets[key]
+        return st.secrets.get(key, default)
     except Exception:
         return default
 
@@ -103,11 +112,11 @@ def _build_symptom_speciality_map():
     }
 
 
-def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> None:
+def render_floating_chatbot(patient_name: str = "", patient_email: str = "", patient_role: str = "Patient") -> None:
     """Render a floating chatbot launcher and greeting panel."""
     chatbot_css = get_chatbot_component_css()
     safe_name = escape((patient_name or "").strip())
-    greeting = f"Hi {safe_name} 👋" if safe_name else "Hi 👋"
+    greeting = f"Hi {safe_name} \U0001F44B" if safe_name else "Hi \U0001F44B"
     ollama_base_url = _get_secret_value("OLLAMA_BASE_URL") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model = _get_secret_value("OLLAMA_MODEL") or os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     llm_system_prompt = (
@@ -139,6 +148,9 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
     ollama_base_url_json = json.dumps(ollama_base_url)
     ollama_model_json = json.dumps(ollama_model)
     llm_system_prompt_json = json.dumps(llm_system_prompt)
+    patient_name_json = json.dumps(patient_name or "")
+    patient_email_json = json.dumps(patient_email or "")
+    patient_role_json = json.dumps(patient_role or "Patient")
     components.html(
         """
         <!doctype html>
@@ -153,7 +165,7 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         <body>
         <div class="mm-chatbot-wrap">
             <input type="checkbox" id="mm-chatbot-toggle" class="mm-chatbot-toggle" />
-            <label class="mm-chatbot-btn" for="mm-chatbot-toggle" aria-label="Open chatbot">💬</label>
+            <label class="mm-chatbot-btn" for="mm-chatbot-toggle" aria-label="Open chatbot">&#128172;</label>
             <div class="mm-chatbot-panel" role="dialog" aria-label="Chatbot window">
                 <div class="mm-chatbot-header">MedMinder Assistant</div>
                 <div class="mm-chatbot-body">
@@ -204,6 +216,9 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         const ollamaBaseUrl = __MM_OLLAMA_BASE_URL_JSON__;
         const ollamaModel = __MM_OLLAMA_MODEL_JSON__;
         const llmSystemPrompt = __MM_LLM_SYSTEM_PROMPT_JSON__;
+        const currentUserName = __MM_USER_NAME_JSON__;
+        const currentUserEmail = __MM_USER_EMAIL_JSON__;
+        const currentUserRole = __MM_USER_ROLE_JSON__;
         const conversation = [];
         let awaitingSymptomInput = false;
 
@@ -240,11 +255,13 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         function navigateToAppointment(doctorEmail) {
             const parentWin = window.parent;
             if (!parentWin || !parentWin.location || !parentWin.history) return;
-            const currentPath = parentWin.location.pathname || "/";
             const params = new URLSearchParams(parentWin.location.search || "");
             params.set("doctor_email", doctorEmail || "");
-            parentWin.history.replaceState({}, "", `${currentPath}?${params.toString()}`);
-            parentWin.location.reload();
+            params.set("logged_in", "1");
+            if (currentUserName) params.set("user_name", currentUserName);
+            if (currentUserEmail) params.set("user_email", currentUserEmail);
+            if (currentUserRole) params.set("user_role", currentUserRole);
+            parentWin.location.href = `/?${params.toString()}`;
         }
 
         function appendDoctorButtons(target, doctors) {
@@ -253,10 +270,12 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
             const thread = body.querySelector('.mm-chatbot-thread');
             if (!thread || !Array.isArray(doctors) || doctors.length === 0) return;
 
+            const topDoctors = doctors.slice(0, 5);
+
             const optionsWrap = document.createElement('div');
             optionsWrap.className = 'mm-chatbot-options';
 
-            doctors.forEach((doctor) => {
+            topDoctors.forEach((doctor) => {
                 const doctorBtn = document.createElement('button');
                 doctorBtn.type = 'button';
                 doctorBtn.className = 'mm-chatbot-option';
@@ -434,10 +453,16 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
             const matchedDoctors = Array.isArray(doctorsBySpeciality[speciality])
                 ? doctorsBySpeciality[speciality]
                 : [];
+            const fallbackDoctors = Object.values(doctorsBySpeciality)
+                .flat()
+                .filter((doctor) => doctor && doctor.email);
             let replyHtml = `Based on the symptoms you shared, I suggest booking an appointment with a <strong>${speciality}</strong>.`;
+            const doctorsToShow = matchedDoctors.length > 0 ? matchedDoctors : fallbackDoctors;
 
             if (matchedDoctors.length > 0) {
                 replyHtml += `<br><br>Available doctors:`;
+            } else if (fallbackDoctors.length > 0) {
+                replyHtml += `<br><br>I could not find a perfect speciality match, but these doctors are available now:`;
             } else {
                 replyHtml += `<br><br>No doctors are currently available in that speciality.`;
             }
@@ -447,8 +472,8 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
                 replyHtml,
                 true,
             );
-            if (matchedDoctors.length > 0) {
-                appendDoctorButtons(target, matchedDoctors);
+            if (doctorsToShow.length > 0) {
+                appendDoctorButtons(target, doctorsToShow);
             }
         }
 
@@ -484,7 +509,13 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "") -> 
         .replace("__MM_SYMPTOM_SPECIALITY_MAP_JSON__", symptom_speciality_map_json)
         .replace("__MM_OLLAMA_BASE_URL_JSON__", ollama_base_url_json)
         .replace("__MM_OLLAMA_MODEL_JSON__", ollama_model_json)
-        .replace("__MM_LLM_SYSTEM_PROMPT_JSON__", llm_system_prompt_json),
+        .replace("__MM_LLM_SYSTEM_PROMPT_JSON__", llm_system_prompt_json)
+        .replace("__MM_USER_NAME_JSON__", patient_name_json)
+        .replace("__MM_USER_EMAIL_JSON__", patient_email_json)
+        .replace("__MM_USER_ROLE_JSON__", patient_role_json),
         height=520,
         scrolling=False,
     )
+
+
+

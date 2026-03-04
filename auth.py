@@ -329,6 +329,38 @@ def get_all_patients():
     ]
 
 
+
+def get_all_doctors():
+    """
+    Fetch all registered doctors for patient appointment booking.
+
+    Returns:
+        list[dict]: [{doctor_id, name, email, speciality, office_hours}, ...]
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT d.doctor_id, u.name, u.email, d.speciality, d.office_hours
+        FROM doctors d
+        JOIN users u ON u.email = d.email
+        WHERE u.role = 'Doctor'
+        ORDER BY u.name COLLATE NOCASE ASC
+        """
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "doctor_id": row[0],
+            "name": row[1],
+            "email": row[2],
+            "speciality": row[3],
+            "office_hours": row[4],
+        }
+        for row in rows
+    ]
 def get_doctors_by_speciality(speciality):
     """
     Fetch doctors matching a speciality.
@@ -545,3 +577,4 @@ def update_user_profile(email, name=None, new_email=None, address=None):
         return False, f"Error updating profile: {str(e)}"
     finally:
         conn.close()
+
