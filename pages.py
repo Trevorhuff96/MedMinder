@@ -19,6 +19,14 @@ from auth import (
     update_user_profile,
 )
 from prescription import save_prescription, get_prescriptions_for_patient
+from appointments import (
+    save_appointment,
+    cancel_appointment,
+    get_appointments_for_patient,
+    get_appointments_for_doctor,
+    get_care_team_for_patient,
+    get_booked_slots_for_doctor,
+)
 from styles import load_custom_styles
 from ui_components import render_floating_chatbot
 
@@ -599,6 +607,7 @@ def appointments_page():
     render_side_drawer()
 
     role = st.session_state.get("user_role", "")
+    user_email = st.session_state.get("user_email", "")
     title = "📅 Appointments"
     
     header_col1, header_col2 = st.columns([5.5, 0.5])
@@ -612,7 +621,7 @@ def appointments_page():
             st.rerun()
     
     st.markdown(
-        f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.get('user_email', '')} | "
+        f"<p class='patient-account-role'><strong>Account:</strong> {user_email} | "
         f"<strong>Role:</strong> {role}</p>",
         unsafe_allow_html=True,
     )
@@ -620,10 +629,120 @@ def appointments_page():
 
     if role == "Doctor":
         st.subheader("Daily Schedule")
-        st.info("Your upcoming patient appointments will appear here.")
+        
+        # Get doctor's appointments
+        doctor_appointments = get_appointments_for_doctor(user_email)
+        
+        if not doctor_appointments:
+            st.info("No upcoming patient appointments.")
+        else:
+            st.markdown(f"**Total Appointments:** {len(doctor_appointments)}")
+            st.markdown("---")
+            
+            for appt in doctor_appointments:
+                with st.container():
+                    display_date = appt["date"]
+                    try:
+                        date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                        display_date = date_obj.strftime("%b %d, %Y")
+                    except (ValueError, TypeError):
+                        pass
+
+                    display_time = appt["time"]
+                    try:
+                        time_obj = datetime.strptime(appt["time"], "%H:%M")
+                        display_time = time_obj.strftime("%I:%M %p")
+                    except (ValueError, TypeError):
+                        pass
+
+                    status_label = (appt.get("status") or "unknown").upper()
+                    patient_name = escape(appt.get("patient_name") or "Unknown Patient")
+                    patient_email = escape(appt.get("patient_email") or "")
+                    
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px;">
+                            <div class="patient-rx-head" style="margin-bottom: 8px;">
+                                <div class="doctor-rx-name">👤 {patient_name}</div>
+                                <span class="patient-rx-date">{status_label}</span>
+                            </div>
+                            <p class="doctor-rx-note" style="margin-bottom: 6px;">📧 {patient_email}</p>
+                            <p class="doctor-rx-note" style="margin-bottom: 0;">📅 {display_date} &nbsp;&nbsp;🕐 {display_time}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    
+                    if appt.get('notes'):
+                        st.markdown(f"**Notes:** {appt['notes']}")
+                    
+                    st.markdown("---")
         return
 
-    st.header("📅 Appointment Scheduler")
+    # Patient view - show existing appointments first
+    st.subheader("My Appointments")
+    patient_appointments = get_appointments_for_patient(user_email)
+    
+    if patient_appointments:
+        st.markdown(f"**Total Appointments:** {len(patient_appointments)}")
+        st.markdown("---")
+        
+        for appt in patient_appointments:
+            with st.container():
+                card_col, action_col = st.columns([6, 1])
+
+                display_date = appt["date"]
+                try:
+                    date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                    display_date = date_obj.strftime("%b %d, %Y")
+                except (ValueError, TypeError):
+                    pass
+
+                display_time = appt["time"]
+                try:
+                    time_obj = datetime.strptime(appt["time"], "%H:%M")
+                    display_time = time_obj.strftime("%I:%M %p")
+                except (ValueError, TypeError):
+                    pass
+
+                status_label = (appt.get("status") or "unknown").upper()
+                doctor_name = escape(appt.get("doctor_name") or "Unknown Doctor")
+                speciality = escape(appt.get("speciality") or "General")
+
+                with card_col:
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px;">
+                            <div class="patient-rx-head" style="margin-bottom: 8px;">
+                                <div class="doctor-rx-name">👨‍⚕️ Dr. {doctor_name}</div>
+                                <span class="patient-rx-date">{status_label}</span>
+                            </div>
+                            <p class="doctor-rx-note" style="margin-bottom: 6px;">🩺 {speciality}</p>
+                            <p class="doctor-rx-note" style="margin-bottom: 0;">📅 {display_date} &nbsp;&nbsp;🕐 {display_time}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                with action_col:
+                    if appt['status'] != 'cancelled':
+                        if st.button("Cancel", key=f"cancel_patient_{appt['appointment_id']}"):
+                            success, message = cancel_appointment(appt['appointment_id'], user_email)
+                            if success:
+                                st.success("✅ Appointment cancelled. Doctor will be removed from your care team if you have no other appointments with them.")
+                                st.rerun()
+                            else:
+                                st.error(message)
+                
+                if appt.get('notes'):
+                    st.markdown(f"**Notes:** {appt['notes']}")
+                
+                st.markdown("---")
+    else:
+        st.info("You have no appointments yet. Book one below!")
+    
+    st.markdown("---")
+    st.header("📅 Book New Appointment")
     st.markdown("---")
 
     doctors = get_all_doctors()
@@ -665,32 +784,86 @@ def appointments_page():
     )
 
     today = date.today()
-    tomorrow = today + timedelta(days=1)
-    day_after = today + timedelta(days=2)
 
-    calendar_events = [
-        {
-            "title": "Available - Click to Book",
-            "start": f"{tomorrow}T09:00:00",
-            "end": f"{tomorrow}T10:00:00",
-            "backgroundColor": "#28a745",
-            "borderColor": "#28a745",
-        },
-        {
-            "title": "Available - Click to Book",
-            "start": f"{tomorrow}T13:30:00",
-            "end": f"{tomorrow}T14:30:00",
-            "backgroundColor": "#28a745",
-            "borderColor": "#28a745",
-        },
-        {
-            "title": "Available - Click to Book",
-            "start": f"{day_after}T10:00:00",
-            "end": f"{day_after}T11:00:00",
-            "backgroundColor": "#28a745",
-            "borderColor": "#28a745",
-        },
-    ]
+    # Generate appointment slots from doctor's office hours
+    def generate_appointment_slots(doctor_office_hours, start_date, num_days=14):
+        """Generate appointment slots based on office hours."""
+        slots = []
+        
+        # Parse office hours (e.g., "9:00 AM to 6:00 PM")
+        office_hours_str = doctor_office_hours or "9:00 AM to 5:00 PM"
+        try:
+            parts = office_hours_str.lower().replace("to", "-").split("-")
+            if len(parts) == 2:
+                start_time_str = parts[0].strip()
+                end_time_str = parts[1].strip()
+                
+                # Parse start time
+                start_hour = datetime.strptime(start_time_str, "%I:%M %p").hour
+                # Parse end time
+                end_hour = datetime.strptime(end_time_str, "%I:%M %p").hour
+            else:
+                # Default hours
+                start_hour = 9
+                end_hour = 17
+        except (ValueError, AttributeError):
+            # Default hours if parsing fails
+            start_hour = 9
+            end_hour = 17
+        
+        # Generate slots for each day
+        for day_offset in range(1, num_days + 1):  # Start from tomorrow
+            slot_date = start_date + timedelta(days=day_offset)
+            
+            # Skip weekends
+            if slot_date.weekday() >= 5:  # 5=Saturday, 6=Sunday
+                continue
+            
+            # Generate 30-minute slots throughout the day
+            current_hour = start_hour
+            while current_hour < end_hour:
+                for minutes in [0, 30]:
+                    if current_hour == end_hour - 1 and minutes == 30:
+                        break  # Don't create slot 30 min before closing
+                    
+                    slot_time = datetime(
+                        slot_date.year, slot_date.month, slot_date.day,
+                        current_hour, minutes
+                    )
+                    
+                    # Skip lunch hour (12:00-13:00)
+                    if current_hour == 12:
+                        continue
+                    
+                    slots.append({
+                        "title": "Available - Click to Book",
+                        "start": slot_time.isoformat(),
+                        "end": (slot_time + timedelta(minutes=30)).isoformat(),
+                        "backgroundColor": "#28a745",
+                        "borderColor": "#28a745",
+                    })
+                
+                current_hour += 1
+        
+        return slots
+    
+    calendar_events = generate_appointment_slots(
+        viewed_doc.get("office_hours"),
+        today,
+        num_days=14
+    )
+
+    booked_slots = get_booked_slots_for_doctor(viewed_doc.get("email"))
+    available_events = []
+    for event in calendar_events:
+        event_start = event.get("start", "")
+        try:
+            start_obj = datetime.fromisoformat(event_start.replace("Z", "+00:00"))
+            slot_key = (start_obj.strftime("%Y-%m-%d"), start_obj.strftime("%H:%M"))
+            if slot_key not in booked_slots:
+                available_events.append(event)
+        except ValueError:
+            available_events.append(event)
 
     calendar_options = {
         "editable": False,
@@ -698,17 +871,117 @@ def appointments_page():
         "headerToolbar": {
             "left": "today prev,next",
             "center": "title",
-            "right": "timeGridWeek,timeGridDay",
+            "right": "dayGridMonth,timeGridDay,listWeek",
         },
-        "initialView": "timeGridWeek",
+        "initialView": "dayGridMonth",
+        "buttonText": {
+            "today": "Today",
+            "dayGridMonth": "Month",
+            "timeGridDay": "Day",
+            "listWeek": "List",
+        },
         "slotMinTime": "08:00:00",
         "slotMaxTime": "18:00:00",
+        "dayMaxEvents": True,
+        "height": 650,
+        "validRange": {
+            "start": str(today),
+            "end": str(today + timedelta(days=30)),
+        },
     }
 
-    st.markdown("**Click on an available green slot on the calendar below to book your appointment.**")
+    st.markdown("**Use Month, Day, or List view. Click an available green slot to book.**")
+
+    # Build quick-book options from currently available calendar events
+    quick_slots = []
+    for event in available_events:
+        start_value = event.get("start", "")
+        try:
+            slot_dt = datetime.fromisoformat(start_value.replace("Z", "+00:00"))
+            quick_slots.append(
+                {
+                    "event_start": start_value,
+                    "date_key": slot_dt.strftime("%Y-%m-%d"),
+                    "date_label": slot_dt.strftime("%b %d, %Y"),
+                    "time_label": slot_dt.strftime("%I:%M %p"),
+                }
+            )
+        except ValueError:
+            continue
+
+    quick_slots.sort(key=lambda item: item["event_start"])
+
+    def process_appointment_booking(event_start):
+        # Create unique key for this appointment booking to prevent duplicates
+        appt_key = f"{user_email}_{viewed_doc.get('email')}_{event_start}"
+
+        # Check if this appointment was just booked in this session
+        if "booked_appointments" not in st.session_state:
+            st.session_state.booked_appointments = set()
+
+        if appt_key in st.session_state.booked_appointments:
+            st.info("✅ This appointment slot has already been booked!")
+            return
+
+        try:
+            date_obj = datetime.fromisoformat(event_start.replace("Z", "+00:00"))
+            formatted_date = date_obj.strftime("%B %d, %Y at %I:%M %p")
+
+            # Save appointment to database
+            success, message, appt_id = save_appointment(
+                patient_email=user_email,
+                doctor_email=viewed_doc.get("email"),
+                appointment_datetime=event_start,
+                notes=""
+            )
+
+            if success:
+                # Mark this appointment as booked in session
+                st.session_state.booked_appointments.add(appt_key)
+
+                st.success(
+                    f"✅ Awesome! Your appointment is confirmed with Dr. {viewed_doc.get('name', 'your doctor')} on **{formatted_date}**."
+                )
+                st.balloons()
+                st.info(f"🩺 Dr. {viewed_doc.get('name')} has been added to your care team!")
+                st.rerun()
+            else:
+                st.error(f"Failed to save appointment: {message}")
+        except ValueError:
+            st.error("Invalid appointment time format. Please try again.")
+
+    st.markdown("#### Quick Book")
+    if quick_slots:
+        unique_dates = []
+        seen_dates = set()
+        for slot in quick_slots:
+            date_key = slot["date_key"]
+            if date_key not in seen_dates:
+                seen_dates.add(date_key)
+                unique_dates.append((date_key, slot["date_label"]))
+
+        selected_date_key = st.selectbox(
+            "Pick a date:",
+            options=[item[0] for item in unique_dates],
+            format_func=lambda key: next((label for value, label in unique_dates if value == key), key),
+            key=f"quick_book_date_{viewed_doc.get('email', 'doctor')}",
+        )
+
+        day_slots = [slot for slot in quick_slots if slot["date_key"] == selected_date_key]
+        selected_event_start = st.selectbox(
+            "Pick a time:",
+            options=[slot["event_start"] for slot in day_slots],
+            format_func=lambda value: next((slot["time_label"] for slot in day_slots if slot["event_start"] == value), value),
+            key=f"quick_book_time_{viewed_doc.get('email', 'doctor')}",
+        )
+
+        if st.button("Book Selected Time", type="primary", key=f"quick_book_btn_{viewed_doc.get('email', 'doctor')}"):
+            process_appointment_booking(selected_event_start)
+    else:
+        st.info("No available times for this provider right now.")
 
     cal_result = calendar(
-        events=calendar_events,
+        events=available_events,
         options=calendar_options,
         key=f"calendar_{viewed_doc.get('doctor_id', viewed_doc.get('email', 'doc'))}",
     )
@@ -717,17 +990,8 @@ def appointments_page():
 
     if cal_result and cal_result.get("callback") == "eventClick":
         event_start = cal_result.get("eventClick", {}).get("event", {}).get("start", "")
-
-        try:
-            date_obj = datetime.fromisoformat(event_start.replace("Z", "+00:00"))
-            formatted_date = date_obj.strftime("%B %d, %Y at %I:%M %p")
-        except ValueError:
-            formatted_date = event_start
-
-        st.success(
-            f"✅ Awesome! Your appointment is confirmed with {viewed_doc.get('name', 'your doctor')} on **{formatted_date}**."
-        )
-        st.balloons()
+        if event_start:
+            process_appointment_booking(event_start)
 
 
 def doctor_dashboard_page():
@@ -760,6 +1024,14 @@ def doctor_dashboard_page():
     # Get patient count for this doctor
     total_patients = get_patient_count_for_doctor(st.session_state.user_email)
     
+    # Get appointment data for metrics
+    all_appointments = get_appointments_for_doctor(st.session_state.user_email)
+    total_appointments = len(all_appointments)
+    
+    today_str = date.today().strftime("%Y-%m-%d")
+    today_appointments = [appt for appt in all_appointments if appt.get('date') == today_str]
+    today_count = len(today_appointments)
+    
     # Doctor summary metrics
     metrics = [
         {
@@ -771,17 +1043,17 @@ def doctor_dashboard_page():
         },
         {
             "icon": "📅",
-            "label": "Today's Appointments",
-            "value": "8",
-            "detail": "2 follow-ups pending",
-            "badge": "Today",
+            "label": "Total Appointments",
+            "value": str(total_appointments),
+            "detail": f"{today_count} scheduled today",
+            "badge": "Upcoming",
         },
         {
-            "icon": "💊",
-            "label": "Refill Requests",
-            "value": "12",
-            "detail": "Action required",
-            "badge": "Urgent",
+            "icon": "📋",
+            "label": "Today's Schedule",
+            "value": str(today_count),
+            "detail": "appointments today",
+            "badge": "Today",
         },
     ]
 
@@ -847,12 +1119,61 @@ def doctor_dashboard_page():
                 st.markdown(patient_card_html, unsafe_allow_html=True)
         
     with tab2:
-        st.subheader("Today's Schedule")
-        st.info("Calendar view and appointment details will go here.")
+        st.subheader("Daily Schedule")
+        
+        # Get doctor's appointments for today only
+        all_doctor_appointments = get_appointments_for_doctor(st.session_state.user_email)
+        today_str = date.today().strftime("%Y-%m-%d")
+        today_appointments = [appt for appt in all_doctor_appointments if appt.get('date') == today_str]
+        
+        if not today_appointments:
+            st.info("No appointments today.")
+        else:
+            st.markdown(f"<p style='color: #2e3d63; font-size: 16px; font-weight: 600; margin-bottom: 10px;'>Today's Appointments: {len(today_appointments)}</p>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            for appt in today_appointments:
+                with st.container():
+                    display_date = appt["date"]
+                    try:
+                        date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                        display_date = date_obj.strftime("%b %d, %Y")
+                    except (ValueError, TypeError):
+                        pass
+
+                    display_time = appt["time"]
+                    try:
+                        time_obj = datetime.strptime(appt["time"], "%H:%M")
+                        display_time = time_obj.strftime("%I:%M %p")
+                    except (ValueError, TypeError):
+                        pass
+
+                    status_label = (appt.get("status") or "unknown").upper()
+                    patient_name = escape(appt.get("patient_name") or "Unknown Patient")
+                    patient_email = escape(appt.get("patient_email") or "")
+                    
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px;">
+                            <div class="patient-rx-head" style="margin-bottom: 8px;">
+                                <div class="doctor-rx-name">👤 {patient_name}</div>
+                                <span class="patient-rx-date">{status_label}</span>
+                            </div>
+                            <p class="doctor-rx-note" style="margin-bottom: 6px;">📧 {patient_email}</p>
+                            <p class="doctor-rx-note" style="margin-bottom: 0;">📅 {display_date} &nbsp;&nbsp;🕐 {display_time}</p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    
+                    if appt.get('notes'):
+                        st.markdown(f"**Notes:** {appt['notes']}")
+                    
+                    st.markdown("---")
         
     with tab3:
         st.subheader("Manage Prescriptions")
-        st.markdown("<p class='doctor-rx-subtitle'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
+        st.markdown("<p class='doctor-rx-subtitle' style='color: #2e3d63;'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
         
         # Show only doctor's existing patients
         my_patients = get_patients_for_doctor(st.session_state.user_email)
@@ -1256,6 +1577,9 @@ def patient_dashboard_page():
     # Get prescriptions for calculations
     patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
     
+    # Get appointments for next appointment metric
+    patient_appointments = get_appointments_for_patient(st.session_state.get("user_email", ""))
+    
     # Calculate next dose dynamically
     next_dose_info = get_next_medication_dose(patient_prescriptions)
     
@@ -1273,6 +1597,35 @@ def patient_dashboard_page():
     adherence_percent = adherence_info["adherence_percent"]
     adherence_trend = adherence_info["trend"]
     adherence_detail = f"Taken {adherence_info['taken']}/{adherence_info['total']} today"
+    
+    # Get next appointment info
+    if patient_appointments:
+        # Find the next upcoming appointment (future dates)
+        from datetime import datetime as dt
+        today = dt.now()
+        future_appointments = [
+            appt for appt in patient_appointments
+            if appt.get('date') and appt['date'] >= today.strftime("%Y-%m-%d")
+        ]
+        if future_appointments:
+            next_appt = future_appointments[0]
+            try:
+                appt_date = dt.strptime(next_appt['date'], "%Y-%m-%d").strftime("%b %d")
+                next_appt_value = appt_date
+                next_appt_detail = f"Dr. {next_appt.get('doctor_name', 'Unknown')}"
+                next_appt_badge = next_appt.get('time', '')
+            except:
+                next_appt_value = "—"
+                next_appt_detail = "Invalid date"
+                next_appt_badge = ""
+        else:
+            next_appt_value = "—"
+            next_appt_detail = "No upcoming appointments"
+            next_appt_badge = ""
+    else:
+        next_appt_value = "—"
+        next_appt_detail = "No appointments scheduled"
+        next_appt_badge = ""
     
     # Patient summary metrics
     metrics = [
@@ -1293,9 +1646,9 @@ def patient_dashboard_page():
         {
             "icon": "🩺",
             "label": "Next Appointment",
-            "value": "Oct 12",
-            "detail": "Dr. Smith",
-            "badge": "10:30 AM",
+            "value": next_appt_value,
+            "detail": next_appt_detail,
+            "badge": next_appt_badge,
         },
     ]
 
@@ -1547,48 +1900,42 @@ def patient_dashboard_page():
         
     with tab3:
         st.subheader("Care Team")
-        if not patient_prescriptions:
-            st.info("No care team members found yet.")
+        
+        # Get care team from database (includes doctors from appointments and prescriptions)
+        care_team = get_care_team_for_patient(st.session_state.get("user_email", ""))
+        
+        if not care_team:
+            st.info("No doctors in your care team yet. Book an appointment or receive a prescription to add a doctor to your team!")
         else:
-            doctor_map = {}
-            for rx in patient_prescriptions:
-                doctor_email = (rx.get("doctor_email") or "").strip()
-                doctor_name = (rx.get("doctor_name") or doctor_email or "Unknown doctor").strip()
-                doctor_key = doctor_email or doctor_name
-                medicines = {
-                    (med.get("name") or "").strip()
-                    for med in rx.get("medicines", [])
-                    if (med.get("name") or "").strip()
-                }
-
-                if doctor_key not in doctor_map:
-                    doctor_map[doctor_key] = {
-                        "doctor_name": doctor_name,
-                        "doctor_email": doctor_email,
-                        "medicines": set(),
-                    }
-                doctor_map[doctor_key]["medicines"].update(medicines)
-
-            associated_doctors = sorted(
-                doctor_map.values(),
-                key=lambda d: d["doctor_name"].lower(),
+            st.markdown(
+                f"<p style='color: #2e3d63; font-size: 16px; font-weight: 600; margin-bottom: 20px;'>Total Doctors: {len(care_team)}</p>",
+                unsafe_allow_html=True
             )
-
-            if not associated_doctors:
-                st.info("No care team members found yet.")
-            else:
-                for doctor in associated_doctors:
-                    doctor_name = escape(doctor["doctor_name"] or "Unknown doctor")
-                    doctor_email = escape(doctor["doctor_email"] or "Email not available")
-                    st.markdown(
-                        f"""
-                        <div class="doctor-rx-card">
-                            <p class="doctor-rx-name">{doctor_name}</p>
-                            <p class="doctor-rx-note">{doctor_email}</p>
+            
+            for doctor in care_team:
+                doctor_name = escape(doctor['name'])
+                speciality = escape(doctor['speciality'])
+                email = escape(doctor['email'])
+                office_hours = escape(doctor.get('office_hours') or 'Not specified')
+                linked_date = doctor.get('linked_at', '')[:10] if doctor.get('linked_at') else 'N/A'
+                
+                care_team_card = f"""
+                <div class="doctor-rx-card" style="margin-bottom: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 8px; border-left: 4px solid #4a90e2;">
+                    <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 20px;">
+                        <div>
+                            <p style="color: #2e3d63; font-size: 16px; font-weight: 600; margin-bottom: 8px;">👨‍⚕️ Dr. {doctor_name}</p>
+                            <p style="color: #5a6c7d; font-size: 14px; margin-bottom: 4px;">🩺 <strong>Specialty:</strong> {speciality}</p>
+                            <p style="color: #5a6c7d; font-size: 14px; margin-bottom: 4px;">📧 {email}</p>
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                        <div>
+                            <p style="color: #5a6c7d; font-size: 14px; margin-bottom: 4px;"><strong>🕐 Office Hours:</strong></p>
+                            <p style="color: #5a6c7d; font-size: 14px; margin-bottom: 8px;">{office_hours}</p>
+                            <p style="color: #5a6c7d; font-size: 14px;"><strong>Added:</strong> {linked_date}</p>
+                        </div>
+                    </div>
+                </div>
+                """
+                st.markdown(care_team_card, unsafe_allow_html=True)
 
     # Floating chatbot launcher for patient dashboard
     # Keep it hidden while the side menu is open so it does not block menu clicks.

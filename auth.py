@@ -194,7 +194,7 @@ def get_doctors_by_speciality():
 
 def get_patient_count_for_doctor(doctor_email):
     """
-    Get the count of unique patients who have prescriptions from a specific doctor.
+    Get count of unique patients linked to a doctor.
     
     Args:
         doctor_email: Email of the doctor
@@ -207,9 +207,9 @@ def get_patient_count_for_doctor(doctor_email):
     
     cursor.execute(
         """
-        SELECT COUNT(DISTINCT patient_id)
-        FROM prescription
-        WHERE doctor_email = ? AND patient_id IS NOT NULL
+        SELECT COUNT(DISTINCT patient_email)
+        FROM care_team
+        WHERE doctor_email = ?
         """,
         (doctor_email,)
     )
@@ -221,7 +221,7 @@ def get_patient_count_for_doctor(doctor_email):
 
 def get_patients_for_doctor(doctor_email):
     """
-    Get all patients who have prescriptions from a specific doctor.
+    Get all patients linked to a specific doctor via care team.
     
     Args:
         doctor_email: Email of the doctor
@@ -234,7 +234,7 @@ def get_patients_for_doctor(doctor_email):
     
     cursor.execute(
         """
-        SELECT DISTINCT 
+        SELECT 
             p.patient_id,
             u.name,
             u.email,
@@ -242,17 +242,22 @@ def get_patients_for_doctor(doctor_email):
             p.gender,
             p.phone,
             p.address,
-            COUNT(pr.prescription_id) as prescription_count
-        FROM prescription pr
-        JOIN patients p ON pr.patient_id = p.patient_id
-        JOIN users u ON u.email = p.email
-        WHERE pr.doctor_email = ?
-        GROUP BY p.patient_id, u.name, u.email, p.dob, p.gender, p.phone, p.address
+            COALESCE(prx.prescription_count, 0) as prescription_count
+        FROM care_team ct
+        JOIN users u ON u.email = ct.patient_email
+        LEFT JOIN patients p ON p.email = u.email
+        LEFT JOIN (
+            SELECT patient_id, doctor_email, COUNT(*) as prescription_count
+            FROM prescription
+            WHERE doctor_email = ?
+            GROUP BY patient_id, doctor_email
+        ) prx ON prx.patient_id = p.patient_id AND prx.doctor_email = ct.doctor_email
+        WHERE ct.doctor_email = ?
         ORDER BY u.name ASC
         """,
-        (doctor_email,)
+        (doctor_email, doctor_email)
     )
-    
+
     rows = cursor.fetchall()
     conn.close()
     
@@ -287,10 +292,10 @@ def is_valid_email(email: str) -> bool:
 def hash_password(password):
     """
     Hash password using SHA-256
-    
+
     Args:
         password: Plain text password to hash
-        
+
     Returns:
         str: Hashed password
     """
