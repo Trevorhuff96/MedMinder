@@ -662,6 +662,7 @@ def load_custom_styles():
             text-align: left !important;
         }
 
+        .patient-rx-doctor,
         .patient-rx-diagnosis,
         .patient-rx-followup {
             color: #2e3d63;

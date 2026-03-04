@@ -192,6 +192,84 @@ def get_doctors_by_speciality():
 
     return doctors_by_speciality
 
+def get_patient_count_for_doctor(doctor_email):
+    """
+    Get the count of unique patients who have prescriptions from a specific doctor.
+    
+    Args:
+        doctor_email: Email of the doctor
+        
+    Returns:
+        int: Count of unique patients
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        """
+        SELECT COUNT(DISTINCT patient_id)
+        FROM prescription
+        WHERE doctor_email = ? AND patient_id IS NOT NULL
+        """,
+        (doctor_email,)
+    )
+    
+    count = cursor.fetchone()[0]
+    conn.close()
+    
+    return count
+
+def get_patients_for_doctor(doctor_email):
+    """
+    Get all patients who have prescriptions from a specific doctor.
+    
+    Args:
+        doctor_email: Email of the doctor
+        
+    Returns:
+        list[dict]: List of patient details with prescription count
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        """
+        SELECT DISTINCT 
+            p.patient_id,
+            u.name,
+            u.email,
+            p.dob,
+            p.gender,
+            p.phone,
+            p.address,
+            COUNT(pr.prescription_id) as prescription_count
+        FROM prescription pr
+        JOIN patients p ON pr.patient_id = p.patient_id
+        JOIN users u ON u.email = p.email
+        WHERE pr.doctor_email = ?
+        GROUP BY p.patient_id, u.name, u.email, p.dob, p.gender, p.phone, p.address
+        ORDER BY u.name ASC
+        """,
+        (doctor_email,)
+    )
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "patient_id": row[0],
+            "name": row[1],
+            "email": row[2],
+            "dob": row[3],
+            "gender": row[4],
+            "phone": row[5],
+            "address": row[6],
+            "prescription_count": row[7]
+        }
+        for row in rows
+    ]
+
 def is_valid_email(email: str) -> bool:
     """
     Validate email format using regex
