@@ -996,6 +996,302 @@ def appointments_page():
             process_appointment_booking(event_start)
 
 
+
+def _assistant_state_key(user_role: str, user_email: str) -> str:
+    safe_role = (user_role or "user").lower()
+    safe_email = (user_email or "anon").replace("@", "_at_").replace(".", "_")
+    return f"dashboard_assistant_state_{safe_role}_{safe_email}"
+
+
+def _compact_assistant_context(state: dict, max_messages: int = 14, max_summary_chars: int = 2000) -> None:
+    messages = state.get("messages", [])
+    if len(messages) <= max_messages:
+        return
+
+    overflow = messages[:-max_messages]
+    summary_parts = []
+    for msg in overflow[-8:]:
+        role = "User" if msg.get("role") == "user" else "Assistant"
+        content = " ".join(str(msg.get("content", "")).split())
+        if len(content) > 120:
+            content = content[:117] + "..."
+        summary_parts.append(f"{role}: {content}")
+
+    existing_summary = state.get("summary", "")
+    overflow_summary = " | ".join(summary_parts)
+    combined_summary = f"{existing_summary} | {overflow_summary}".strip(" |")
+
+    state["summary"] = combined_summary[-max_summary_chars:]
+    state["messages"] = messages[-max_messages:]
+
+
+def _infer_speciality_from_text(user_text: str, specialities: list[str]) -> str:
+    text = (user_text or "").lower()
+    if not specialities:
+        return ""
+
+    for speciality in specialities:
+        if speciality.lower() in text:
+            return speciality
+
+    keyword_map = {
+        "Cardiologist": ["chest pain", "heart", "palpitation", "blood pressure", "hypertension"],
+        "Dentist": ["tooth", "teeth", "gum", "jaw", "cavity", "toothache"],
+        "Neurologist": ["headache", "migraine", "seizure", "numbness", "tingling", "memory", "dizziness"],
+        "Pediatrician": ["child", "kid", "baby", "infant", "toddler", "newborn", "son", "daughter"],
+        "General Practitioner": ["fever", "cold", "cough", "flu", "fatigue", "pain", "sore throat"],
+    }
+
+    for speciality, keywords in keyword_map.items():
+        if speciality not in specialities:
+            continue
+        if any(keyword in text for keyword in keywords):
+            return speciality
+
+    if "General Practitioner" in specialities:
+        return "General Practitioner"
+    return specialities[0]
+
+
+def _build_patient_appointment_summary(user_email: str) -> str:
+    appointments = get_appointments_for_patient(user_email)
+    if not appointments:
+        return "You have no appointments yet. I can recommend doctors and help you book one."
+
+    now = datetime.now()
+    upcoming = []
+    past = []
+
+    for appt in appointments:
+        date_value = appt.get("date", "")
+        time_value = appt.get("time", "")
+        try:
+            appt_dt = datetime.strptime(f"{date_value} {time_value}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+
+        if appt_dt >= now:
+            upcoming.append(appt)
+        else:
+            past.append(appt)
+
+    upcoming.sort(key=lambda x: (x.get("date", ""), x.get("time", "")))
+
+    lines = []
+    if upcoming:
+        lines.append(f"You have {len(upcoming)} upcoming appointment(s).")
+        for appt in upcoming[:3]:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')} ({appt.get('speciality', 'General')})"
+            )
+    else:
+        lines.append("You have no upcoming appointments.")
+
+    if past:
+        lines.append(f"You also have {len(past)} past appointment(s) in your history.")
+
+    return "\n".join(lines)
+
+
+def _build_doctor_appointment_summary(user_email: str) -> str:
+    appointments = get_appointments_for_doctor(user_email)
+    if not appointments:
+        return "You currently have no scheduled patient appointments."
+
+    today_str = date.today().strftime("%Y-%m-%d")
+    todays = [appt for appt in appointments if appt.get("date") == today_str]
+
+    lines = [f"You have {len(appointments)} total scheduled appointment(s)."]
+    lines.append(f"Today's appointments: {len(todays)}.")
+    for appt in todays[:5]:
+        lines.append(f"- {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}")
+
+    return "\n".join(lines)
+
+
+def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_text: str, state: dict) -> tuple[str, list[dict]]:
+    text = (user_text or "").strip()
+    lower_text = text.lower()
+
+    asks_history = any(
+        phrase in lower_text
+        for phrase in ["appointment history", "appointments", "schedule", "upcoming", "past appointment", "next appointment"]
+    )
+    asks_doctor_recommendation = any(
+        phrase in lower_text
+        for phrase in ["symptom", "symptoms", "pain", "headache", "fever", "cough", "recommend", "specialist", "doctor should i see"]
+    )
+    asks_booking = any(phrase in lower_text for phrase in ["book", "schedule appointment", "set appointment"])
+
+    if asks_history:
+        if user_role == "Doctor":
+            return _build_doctor_appointment_summary(user_email), []
+        return _build_patient_appointment_summary(user_email), []
+
+    if asks_doctor_recommendation:
+        specialities = get_specialities()
+        chosen_speciality = _infer_speciality_from_text(text, specialities)
+        all_doctors = get_all_doctors()
+
+        matching = [
+            doc for doc in all_doctors
+            if (doc.get("speciality") or "").strip().lower() == chosen_speciality.lower()
+        ] if chosen_speciality else []
+
+        recommended = (matching if matching else all_doctors)[:5]
+        state["last_speciality"] = chosen_speciality
+        state["last_recommended_doctors"] = recommended
+
+        if not recommended:
+            return "I couldn't find any doctors right now. Please try again later.", []
+
+        if matching:
+            reply = (
+                f"Based on what you shared, a **{chosen_speciality}** is a good match.\n"
+                "I listed available doctors below. Click one to open booking."
+            )
+        else:
+            reply = (
+                f"I could not find a direct match for **{chosen_speciality}** right now.\n"
+                "I listed available doctors below so you can still proceed to booking."
+            )
+        return reply, recommended
+
+    if asks_booking:
+        previous_recommendations = state.get("last_recommended_doctors", [])
+        if previous_recommendations:
+            return "Use one of the recommended doctors below to go directly to the appointment scheduler.", previous_recommendations[:5]
+        return "Tell me your symptoms and I can recommend doctors first, then send you to booking.", []
+
+    if "context" in lower_text or "what have we discussed" in lower_text:
+        summary = state.get("summary", "")
+        if summary:
+            return f"Here is a compact context summary from this session:\n{summary}", []
+        return "We just started this session. Ask about symptoms, doctors, or appointment history.", []
+
+    return (
+        "I can help with:\n"
+        "- Appointment history and upcoming schedule\n"
+        "- Symptom-based doctor recommendations\n"
+        "- Sending you directly to booking\n\n"
+        "Try: 'I have chest pain and shortness of breath' or 'show my upcoming appointments'.",
+        [],
+    )
+
+
+def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
+    st.markdown("<h3 style='color:#0f172a; margin-bottom:0.2rem;'>Assistant Chat</h3>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='color:#334155; margin-top:0; margin-bottom:0.8rem;'>"
+        "Context-aware support for symptoms, appointment history, and doctor recommendations."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    # Keep assistant text/bubbles readable on light backgrounds.
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stChatMessage"] {
+            background: #f8fafc;
+            border: 1px solid #dbe3ef;
+            border-radius: 12px;
+            padding: 0.55rem 0.8rem;
+            margin-bottom: 0.55rem;
+        }
+
+        div[data-testid="stChatMessage"][aria-label*="assistant"] {
+            background: #f8fafc;
+            border-color: #dbe3ef;
+        }
+
+        div[data-testid="stChatMessage"][aria-label*="user"] {
+            background: #e9f8f3;
+            border-color: #c8ebe2;
+        }
+
+        div[data-testid="stChatMessage"] * {
+            color: #0f172a !important;
+        }
+
+        div[data-testid="stChatInput"] textarea {
+            color: #0f172a !important;
+            -webkit-text-fill-color: #0f172a !important;
+            background: #ffffff !important;
+            border: 1px solid #cfd8e3 !important;
+            border-radius: 10px !important;
+        }
+
+        div[data-testid="stChatInput"] textarea::placeholder {
+            color: #6b7280 !important;
+            -webkit-text-fill-color: #6b7280 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    state_key = _assistant_state_key(user_role, user_email)
+    if state_key not in st.session_state:
+        st.session_state[state_key] = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Hi! I can discuss symptoms, review appointment history, and recommend doctors."
+                    ),
+                }
+            ],
+            "summary": "",
+            "last_speciality": "",
+            "last_recommended_doctors": [],
+        }
+
+    state = st.session_state[state_key]
+
+    with st.expander("Session context", expanded=False):
+        if state.get("summary"):
+            st.write(state["summary"])
+        else:
+            st.write("Context summary will appear here once the conversation grows.")
+
+    for msg_idx, msg in enumerate(state.get("messages", [])):
+        with st.chat_message(msg.get("role", "assistant")):
+            st.markdown(msg.get("content", ""))
+            recommendations = msg.get("recommended_doctors", [])
+            if recommendations:
+                st.markdown("Recommended doctors:")
+                for doc_idx, doc in enumerate(recommendations):
+                    doctor_name = doc.get("name", "Unknown doctor")
+                    speciality = doc.get("speciality") or "General"
+                    label = f"Book with Dr. {doctor_name} ({speciality})"
+                    button_key = f"dashboard_chat_book_{msg_idx}_{doc_idx}_{doc.get('email', '')}"
+                    if st.button(label, key=button_key, use_container_width=True):
+                        doc_email = (doc.get("email") or "").strip()
+                        if doc_email:
+                            st.session_state.appointment_doctor_email = doc_email
+                            st.session_state.show_appointments = True
+                            st.session_state.show_profile_edit = False
+                            st.session_state.show_prescription = False
+                            st.query_params["doctor_email"] = doc_email
+                            st.rerun()
+
+    prompt = st.chat_input(
+        "Ask about symptoms, appointments, or doctor recommendations...",
+        key=f"dashboard_chat_input_{user_role.lower()}",
+    )
+    if prompt:
+        state["messages"].append({"role": "user", "content": prompt})
+        reply_text, recommended = _generate_dashboard_assistant_reply(user_role, user_email, prompt, state)
+        assistant_msg = {"role": "assistant", "content": reply_text}
+        if recommended:
+            assistant_msg["recommended_doctors"] = recommended
+        state["messages"].append(assistant_msg)
+        _compact_assistant_context(state)
+        st.session_state[state_key] = state
+        st.rerun()
+
+
 def doctor_dashboard_page():
     """Display the dashboard specifically for Doctors"""
     load_custom_styles()
@@ -1080,7 +1376,7 @@ def doctor_dashboard_page():
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Doctor Specific Tabs
-    tab1, tab2, tab3 = st.tabs(["👥 My Patients", "📅 Daily Schedule", "💊 Prescriptions"])
+    tab1, tab2, tab3, tab4 = st.tabs(["My Patients", "Daily Schedule", "Prescriptions", "Assistant Chat"])
     
     with tab1:
         st.subheader("Patient Roster")
@@ -1203,6 +1499,10 @@ def doctor_dashboard_page():
                         st.rerun()
 
 
+
+
+    with tab4:
+        render_dashboard_assistant_tab("Doctor", st.session_state.get("user_email", ""))
 
 
 def prescription_page():
@@ -1675,7 +1975,7 @@ def patient_dashboard_page():
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Patient Specific Tabs
-    tab1, tab2, tab3 = st.tabs(["💊 My Medications", "🔔 Reminders", "🩺 Care Team"])
+    tab1, tab2, tab3, tab4 = st.tabs(["My Medications", "Reminders", "Care Team", "Assistant Chat"])
     
     with tab1:
         st.subheader("Active Prescriptions")
@@ -1938,6 +2238,9 @@ def patient_dashboard_page():
                 </div>
                 """
                 st.markdown(care_team_card, unsafe_allow_html=True)
+
+    with tab4:
+        render_dashboard_assistant_tab("Patient", st.session_state.get("user_email", ""))
 
     # Floating chatbot launcher for patient dashboard
     # Keep it hidden while the side menu is open so it does not block menu clicks.
@@ -2231,3 +2534,5 @@ def profile_edit_page():
                         st.rerun()
                     else:
                         st.error(message)
+
+
