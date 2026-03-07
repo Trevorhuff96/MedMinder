@@ -3,7 +3,7 @@ Appointments and patient-doctor care team management for MedMinder
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_FILE = "medminder.db"
 
@@ -201,7 +201,7 @@ def cancel_appointment(appointment_id, requester_email):
 
 def get_appointments_for_patient(patient_email):
     """
-    Get all appointments for a patient.
+    Get upcoming/future appointments for a patient (today and beyond).
     
     Args:
         patient_email: Patient's email
@@ -211,6 +211,8 @@ def get_appointments_for_patient(patient_email):
     """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    today = datetime.now().strftime("%Y-%m-%d")
 
     cursor.execute(
         """
@@ -227,10 +229,11 @@ def get_appointments_for_patient(patient_email):
         JOIN users u ON a.doctor_email = u.email
         LEFT JOIN doctors d ON d.email = a.doctor_email
         WHERE a.patient_email = ?
-                    AND a.status != 'cancelled'
-        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            AND a.appointment_date >= ?
+            AND a.status != 'cancelled'
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
         """,
-        (patient_email,)
+        (patient_email, today)
     )
 
     rows = cursor.fetchall()
@@ -253,7 +256,7 @@ def get_appointments_for_patient(patient_email):
 
 def get_appointments_for_doctor(doctor_email):
     """
-    Get all appointments for a doctor.
+    Get upcoming/future appointments for a doctor (today and beyond).
     
     Args:
         doctor_email: Doctor's email
@@ -263,6 +266,8 @@ def get_appointments_for_doctor(doctor_email):
     """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    today = datetime.now().strftime("%Y-%m-%d")
 
     cursor.execute(
         """
@@ -277,10 +282,11 @@ def get_appointments_for_doctor(doctor_email):
         FROM appointments a
         JOIN users u ON a.patient_email = u.email
         WHERE a.doctor_email = ?
-                    AND a.status != 'cancelled'
-        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            AND a.appointment_date >= ?
+            AND a.status != 'cancelled'
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
         """,
-        (doctor_email,)
+        (doctor_email, today)
     )
 
     rows = cursor.fetchall()
@@ -372,6 +378,195 @@ def get_booked_slots_for_doctor(doctor_email):
     conn.close()
 
     return {(row[0], row[1]) for row in rows}
+
+
+def update_appointment_notes(appointment_id, notes):
+    """
+    Update notes for an appointment.
+    
+    Args:
+        appointment_id: The appointment ID
+        notes: The notes text to save
+        
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            """
+            UPDATE appointments
+            SET notes = ?
+            WHERE appointment_id = ?
+            """,
+            (notes, appointment_id)
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return True, "Notes updated successfully"
+    except Exception as e:
+        return False, f"Error updating notes: {str(e)}"
+
+
+def get_past_appointments_for_patient(patient_email, days_back=None):
+    """
+    Get past appointments for a patient from the database, optionally filtered by days back.
+    
+    Args:
+        patient_email: Patient's email
+        days_back: Optional number of days to look back (None = all past appointments)
+        
+    Returns:
+        list[dict]: List of past appointment dictionaries
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if days_back:
+        cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        cursor.execute(
+            """
+            SELECT 
+                a.appointment_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.notes,
+                u.name as doctor_name,
+                a.doctor_email,
+                d.speciality
+            FROM appointments a
+            JOIN users u ON a.doctor_email = u.email
+            LEFT JOIN doctors d ON d.email = a.doctor_email
+            WHERE a.patient_email = ?
+                AND a.appointment_date < ?
+                AND a.appointment_date >= ?
+                AND a.status != 'cancelled'
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            """,
+            (patient_email, today, cutoff_date)
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT 
+                a.appointment_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.notes,
+                u.name as doctor_name,
+                a.doctor_email,
+                d.speciality
+            FROM appointments a
+            JOIN users u ON a.doctor_email = u.email
+            LEFT JOIN doctors d ON d.email = a.doctor_email
+            WHERE a.patient_email = ?
+                AND a.appointment_date < ?
+                AND a.status != 'cancelled'
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            """,
+            (patient_email, today)
+        )
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "appointment_id": row[0],
+            "date": row[1],
+            "time": row[2],
+            "status": row[3],
+            "notes": row[4],
+            "doctor_name": row[5],
+            "doctor_email": row[6],
+            "speciality": row[7] or "General",
+        }
+        for row in rows
+    ]
+
+
+def get_past_appointments_for_doctor(doctor_email, days_back=None):
+    """
+    Get past appointments for a doctor from the database, optionally filtered by days back.
+    
+    Args:
+        doctor_email: Doctor's email
+        days_back: Optional number of days to look back (None = all past appointments)
+        
+    Returns:
+        list[dict]: List of past appointment dictionaries
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if days_back:
+        cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        cursor.execute(
+            """
+            SELECT 
+                a.appointment_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.notes,
+                u.name as patient_name,
+                a.patient_email
+            FROM appointments a
+            JOIN users u ON a.patient_email = u.email
+            WHERE a.doctor_email = ?
+                AND a.appointment_date < ?
+                AND a.appointment_date >= ?
+                AND a.status != 'cancelled'
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            """,
+            (doctor_email, today, cutoff_date)
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT 
+                a.appointment_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.notes,
+                u.name as patient_name,
+                a.patient_email
+            FROM appointments a
+            JOIN users u ON a.patient_email = u.email
+            WHERE a.doctor_email = ?
+                AND a.appointment_date < ?
+                AND a.status != 'cancelled'
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+            """,
+            (doctor_email, today)
+        )
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "appointment_id": row[0],
+            "date": row[1],
+            "time": row[2],
+            "status": row[3],
+            "notes": row[4],
+            "patient_name": row[5],
+            "patient_email": row[6],
+        }
+        for row in rows
+    ]
 
 
 # Initialize database tables when module is imported
