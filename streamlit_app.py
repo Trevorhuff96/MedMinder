@@ -25,6 +25,7 @@ def sync_browser_route(route: str) -> None:
       const searchParams = new URLSearchParams(parentWin.location.search || "");
       if ("{route}" !== "appointments") {{
         searchParams.delete("doctor_email");
+        searchParams.delete("from_chatbot");
       }}
       const currentSearch = searchParams.toString() ? `?${{searchParams.toString()}}` : "";
       const currentHash = parentWin.location.hash || "";
@@ -35,6 +36,33 @@ def sync_browser_route(route: str) -> None:
         parentWin.history.replaceState({{}}, "", currentPath + currentSearch + currentHash);
       }}
     }})();
+    </script>
+    """,
+    height=0,
+    width=0,
+    )
+
+
+def install_chatbot_navigation_bridge() -> None:
+  """Bridge iframe URL updates to full reruns when chatbot selects a doctor."""
+  components.html(
+    """
+    <script>
+    (function () {
+      const parentWin = window.parent;
+      if (!parentWin) return;
+      if (parentWin.__mmChatbotNavBridgeInstalled) return;
+      parentWin.__mmChatbotNavBridgeInstalled = true;
+
+      parentWin.addEventListener("popstate", function () {
+        const params = new URLSearchParams(parentWin.location.search || "");
+        const hasDoctor = !!params.get("doctor_email");
+        const fromChatbot = params.get("from_chatbot") === "1";
+        if (hasDoctor && fromChatbot) {
+          parentWin.location.reload();
+        }
+      });
+    })();
     </script>
     """,
     height=0,
@@ -50,6 +78,7 @@ def run_app():
 
   # Load and apply custom styling
   st.markdown(load_custom_styles(), unsafe_allow_html=True)
+  install_chatbot_navigation_bridge()
 
   # Initialize session state (Added user_role!)
   if 'logged_in' not in st.session_state:
@@ -79,16 +108,25 @@ def run_app():
   if 'menu_open' not in st.session_state:
     st.session_state.menu_open = False
 
+  def qp_value(key: str, default=None):
+    """Read query params robustly across Streamlit return formats."""
+    value = st.query_params.get(key, default)
+    if isinstance(value, list):
+      return value[0] if value else default
+    return value
+
   # Restore minimal auth context across full page reloads.
-  logged_in_param = st.query_params.get("logged_in")
+  logged_in_param = qp_value("logged_in")
   if not st.session_state.logged_in and logged_in_param == "1":
     st.session_state.logged_in = True
-    st.session_state.user_name = st.query_params.get("user_name", "")
-    st.session_state.user_email = st.query_params.get("user_email", "")
-    st.session_state.user_role = st.query_params.get("user_role", None)
+    st.session_state.user_name = qp_value("user_name", "")
+    st.session_state.user_email = qp_value("user_email", "")
+    st.session_state.user_role = qp_value("user_role", None)
+    st.session_state.show_auth = False
+    st.session_state.show_signup = False
 
   # Query-param logout hook for top logout links
-  logout_param = st.query_params.get("logout")
+  logout_param = qp_value("logout")
   if logout_param == "1":
     st.session_state.logged_in = False
     st.session_state.user_name = ""
@@ -106,12 +144,18 @@ def run_app():
     st.rerun()
     st.stop()
 
-  appointment_doctor_email = st.query_params.get("doctor_email")
+  appointment_doctor_email = qp_value("doctor_email")
   if st.session_state.logged_in and appointment_doctor_email:
     st.session_state.show_appointments = True
     st.session_state.show_profile_edit = False
     st.session_state.show_prescription = False
     st.session_state.appointment_doctor_email = appointment_doctor_email
+    if qp_value("from_chatbot") == "1":
+      st.query_params["from_chatbot"] = "0"
+
+  toast_message = st.session_state.pop("appointment_toast_message", "")
+  if toast_message:
+    st.toast(toast_message, icon="✅")
 
   # Main App Logic - Route to appropriate page
   if st.session_state.logged_in:

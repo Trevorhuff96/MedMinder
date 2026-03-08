@@ -130,6 +130,13 @@ def get_chatbot_component_css():
             transition: background 0.15s ease, border-color 0.15s ease;
         }
 
+        .mm-chatbot-option-link {
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .mm-chatbot-option:hover {
             background: #e9f0ff;
             border-color: #90abff;
@@ -733,6 +740,171 @@ def load_custom_styles():
             color: #4f5b7a;
             font-size: 0.82rem;
             margin-bottom: 0;
+        }
+
+        .appointment-divider {
+            border: 0 !important;
+            border-top: 1px solid rgba(214, 229, 255, 0.45) !important;
+            margin: 0.95rem 0 1rem 0 !important;
+        }
+
+        .appointment-hero {
+            background: linear-gradient(145deg, #f4f8ff 0%, #e8f1ff 100%);
+            border: 1px solid #d6e6ff !important;
+            border-radius: 14px;
+            padding: 0.9rem 1rem;
+            box-shadow: 0 10px 24px rgba(26, 35, 126, 0.11);
+            margin-bottom: 0.85rem;
+        }
+
+        .appointment-kicker {
+            margin: 0 0 0.2rem 0;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #365f9e;
+        }
+
+        .appointment-title {
+            margin: 0 0 0.25rem 0;
+            font-size: 1.35rem;
+            color: #132f62;
+            font-weight: 800;
+        }
+
+        .appointment-subtitle {
+            margin: 0;
+            color: #42567f;
+            font-size: 0.92rem;
+        }
+
+        .appointment-step-title {
+            margin: 0.2rem 0 0.45rem 0;
+            color: #e8f2ff;
+            font-size: 0.98rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+
+        .appointment-provider-card {
+            background: #f8fbff;
+            border: 1px solid #d7e6ff !important;
+            border-left: 4px solid #2c6ad1 !important;
+            border-radius: 12px;
+            padding: 0.8rem 0.95rem;
+            margin: 0.45rem 0 0.6rem 0;
+            box-shadow: 0 8px 20px rgba(26, 35, 126, 0.1);
+        }
+
+        .appointment-provider-name {
+            color: #112a5b;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 0.2rem;
+        }
+
+        .appointment-provider-meta {
+            color: #38507f;
+            font-size: 0.84rem;
+            margin-bottom: 0.08rem;
+        }
+
+        .appointment-quickbook-title,
+        .appointment-calendar-title {
+            margin: 0.15rem 0 0.2rem 0;
+            color: #dff0ff;
+            font-size: 0.94rem;
+            font-weight: 800;
+        }
+
+        .appointment-quickbook-subtitle {
+            margin: 0 0 0.6rem 0;
+            color: rgba(231, 243, 255, 0.9);
+            font-size: 0.83rem;
+        }
+
+        .appointment-tip {
+            margin: 0.45rem 0 0.8rem 0;
+            color: rgba(227, 241, 255, 0.95);
+            font-size: 0.85rem;
+            background: rgba(0, 0, 0, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 10px;
+            padding: 0.45rem 0.62rem;
+        }
+
+        .appointment-stat {
+            margin: 0.35rem 0 0.65rem 0;
+            color: #2b3f66;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .appointment-filter-label {
+            margin: 0.2rem 0 0.5rem 0;
+            color: #2b3f66;
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .appointment-card {
+            margin-bottom: 0.75rem;
+            padding: 0.8rem 0.95rem;
+            border-radius: 12px;
+            border: 1px solid #d5e5ff !important;
+            background: linear-gradient(160deg, #f9fbff 0%, #f2f7ff 100%);
+            box-shadow: 0 8px 18px rgba(26, 35, 126, 0.1);
+        }
+
+        .appointment-card--past {
+            opacity: 0.82;
+        }
+
+        .appointment-card-head {
+            margin-bottom: 0.42rem;
+        }
+
+        .appointment-card-line {
+            margin-bottom: 0.28rem !important;
+        }
+
+        .appointment-note {
+            margin: 0.42rem 0 0.1rem 0;
+            color: #2e3d63;
+            font-size: 0.82rem;
+        }
+
+        .appointment-note-inline {
+            margin: 0.5rem 0 0 0 !important;
+            color: #2e3d63;
+            font-size: 0.82rem;
+        }
+
+        .appointment-note-inline-empty {
+            color: #5f708f;
+        }
+
+        div[data-testid="stButton"] > button[id*="quick_book_btn_"] {
+            background: linear-gradient(135deg, #27b686 0%, #0ea5a1 55%, #1071b8 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            border-radius: 10px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.01em;
+            padding: 0.62rem 0.95rem !important;
+            box-shadow: 0 10px 20px rgba(8, 83, 129, 0.34) !important;
+        }
+
+        div[data-testid="stButton"] > button[id*="quick_book_btn_"]:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+        }
+
+        div[data-testid="stSelectbox"] > label:has(+ div[id*="quick_book_"]),
+        div[data-testid="stSelectbox"] > label:has(+ div[id*="Choose a doctor"]) {
+            color: #e6f2ff !important;
+            font-weight: 700 !important;
         }
 
         div[data-testid="stButton"] > button[id*="prescribe_"] {

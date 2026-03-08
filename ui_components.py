@@ -252,16 +252,55 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "", pat
             appendMessage(target, text, false, !!asHtml, storeInConversation);
         }
 
-        function navigateToAppointment(doctorEmail) {
-            const parentWin = window.parent;
-            if (!parentWin || !parentWin.location || !parentWin.history) return;
-            const params = new URLSearchParams(parentWin.location.search || "");
+        function buildAppointmentHref(doctorEmail) {
+            const params = new URLSearchParams();
             params.set("doctor_email", doctorEmail || "");
+            params.set("from_chatbot", "1");
             params.set("logged_in", "1");
             if (currentUserName) params.set("user_name", currentUserName);
             if (currentUserEmail) params.set("user_email", currentUserEmail);
             if (currentUserRole) params.set("user_role", currentUserRole);
-            parentWin.location.href = `/?${params.toString()}`;
+            let baseUrl = "";
+
+            // In Streamlit components.html, referrer points to the parent app URL.
+            if (document.referrer) {
+                try {
+                    const refUrl = new URL(document.referrer);
+                    baseUrl = `${refUrl.origin}/`;
+                } catch (error) {
+                    // Ignore and try next fallback.
+                }
+            }
+
+            if (!baseUrl && window.location && window.location.origin && window.location.origin !== "null") {
+                baseUrl = `${window.location.origin}/`;
+            }
+
+            if (!baseUrl) {
+                baseUrl = "http://localhost:8501/";
+            }
+
+            return `${baseUrl.split("?")[0]}?${params.toString()}`;
+        }
+
+        function navigateToAppointment(doctorEmail) {
+            const href = buildAppointmentHref(doctorEmail);
+            if (!href) return;
+            try {
+                if (window.parent && window.parent.location && window.parent.history) {
+                    const targetUrl = new URL(href, window.parent.location.origin);
+                    window.parent.history.replaceState(
+                        {},
+                        "",
+                        `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`
+                    );
+                    window.parent.dispatchEvent(new PopStateEvent("popstate"));
+                    return;
+                }
+            } catch (error) {
+                // Fall back if parent history access is blocked.
+            }
+            window.location.href = href;
         }
 
         function appendDoctorButtons(target, doctors) {
@@ -276,11 +315,16 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "", pat
             optionsWrap.className = 'mm-chatbot-options';
 
             topDoctors.forEach((doctor) => {
-                const doctorBtn = document.createElement('button');
-                doctorBtn.type = 'button';
-                doctorBtn.className = 'mm-chatbot-option';
+                const href = buildAppointmentHref(doctor.email);
+                const doctorBtn = document.createElement('a');
+                doctorBtn.className = 'mm-chatbot-option mm-chatbot-option-link';
                 doctorBtn.textContent = doctor.name;
-                doctorBtn.addEventListener('click', () => navigateToAppointment(doctor.email));
+                doctorBtn.href = href;
+                doctorBtn.target = '_top';
+                doctorBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    navigateToAppointment(doctor.email);
+                });
                 optionsWrap.appendChild(doctorBtn);
             });
 
@@ -453,9 +497,13 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "", pat
             const matchedDoctors = Array.isArray(doctorsBySpeciality[speciality])
                 ? doctorsBySpeciality[speciality]
                 : [];
-            const fallbackDoctors = Object.values(doctorsBySpeciality)
-                .flat()
-                .filter((doctor) => doctor && doctor.email);
+            const fallbackDoctors = Object.keys(doctorsBySpeciality).reduce((acc, key) => {
+                const doctorList = Array.isArray(doctorsBySpeciality[key]) ? doctorsBySpeciality[key] : [];
+                doctorList.forEach((doctor) => {
+                    if (doctor && doctor.email) acc.push(doctor);
+                });
+                return acc;
+            }, []);
             let replyHtml = `Based on the symptoms you shared, I suggest booking an appointment with a <strong>${speciality}</strong>.`;
             const doctorsToShow = matchedDoctors.length > 0 ? matchedDoctors : fallbackDoctors;
 
@@ -516,6 +564,3 @@ def render_floating_chatbot(patient_name: str = "", patient_email: str = "", pat
         height=520,
         scrolling=False,
     )
-
-
-

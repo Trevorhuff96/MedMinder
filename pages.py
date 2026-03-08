@@ -611,6 +611,28 @@ def appointments_page():
     init_menu_state()
     render_side_drawer()
 
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stTabs"] [role="tablist"] {
+            gap: 0.55rem;
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 0.2rem;
+        }
+
+        div[data-testid="stTabs"] [role="tab"] {
+            min-width: 300px;
+            flex: 1 1 0;
+            justify-content: center;
+            border-radius: 10px 10px 0 0;
+            font-weight: 700;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     role = st.session_state.get("user_role", "")
     user_email = st.session_state.get("user_email", "")
     title = "📅 Appointments"
@@ -632,6 +654,15 @@ def appointments_page():
     )
     st.markdown("---")
 
+    def _get_list_container(item_count: int):
+        """Return a scrollable container for long appointment lists."""
+        if item_count > 3:
+            try:
+                return st.container(height=410, border=False)
+            except TypeError:
+                return st.container()
+        return st.container()
+
     if role == "Doctor":
         doctor_tab_upcoming, doctor_tab_past = st.tabs(["Upcoming Appointments", "Past Appointments"])
 
@@ -641,51 +672,53 @@ def appointments_page():
                 st.info("No upcoming patient appointments.")
             else:
                 st.markdown(
-                    f"<p style='color: #333;'><strong>Total Upcoming Appointments:</strong> {len(doctor_appointments)}</p>",
+                    f"<p class='appointment-stat'><strong>Total Upcoming Appointments:</strong> {len(doctor_appointments)}</p>",
                     unsafe_allow_html=True,
                 )
-                for appt in doctor_appointments:
-                    display_date = appt["date"]
-                    try:
-                        date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
-                        display_date = date_obj.strftime("%b %d, %Y")
-                    except (ValueError, TypeError):
-                        pass
+                container = _get_list_container(len(doctor_appointments))
+                with container:
+                    for appt in doctor_appointments:
+                        display_date = appt["date"]
+                        try:
+                            date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                            display_date = date_obj.strftime("%b %d, %Y")
+                        except (ValueError, TypeError):
+                            pass
 
-                    display_time = appt["time"]
-                    try:
-                        time_obj = datetime.strptime(appt["time"], "%H:%M")
-                        display_time = time_obj.strftime("%I:%M %p")
-                    except (ValueError, TypeError):
-                        pass
+                        display_time = appt["time"]
+                        try:
+                            time_obj = datetime.strptime(appt["time"], "%H:%M")
+                            display_time = time_obj.strftime("%I:%M %p")
+                        except (ValueError, TypeError):
+                            pass
 
-                    status_label = (appt.get("status") or "unknown").upper()
-                    patient_name = escape(appt.get("patient_name") or "Unknown Patient")
-                    patient_email = escape(appt.get("patient_email") or "")
+                        status_label = (appt.get("status") or "unknown").upper()
+                        patient_name = escape(appt.get("patient_name") or "Unknown Patient")
+                        patient_email = escape(appt.get("patient_email") or "")
 
-                    st.markdown(
-                        f"""
-                        <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px;">
-                            <div class="patient-rx-head" style="margin-bottom: 8px;">
-                                <div class="doctor-rx-name">{patient_name}</div>
-                                <span class="patient-rx-date">{status_label}</span>
-                            </div>
-                            <p class="doctor-rx-note" style="margin-bottom: 6px;">{patient_email}</p>
-                            <p class="doctor-rx-note" style="margin-bottom: 0;">{display_date} {display_time}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    if appt.get("notes"):
                         st.markdown(
-                            f"<p style='color: #333; margin-top: 0.5rem; margin-bottom: 0;'><strong>Notes:</strong> {appt['notes']}</p>",
+                            f"""
+                            <div class="doctor-rx-card appointment-card">
+                                <div class="patient-rx-head appointment-card-head">
+                                    <div class="doctor-rx-name">{patient_name}</div>
+                                    <span class="patient-rx-date">{status_label}</span>
+                                </div>
+                                <p class="doctor-rx-note appointment-card-line">{patient_email}</p>
+                                <p class="doctor-rx-note">{display_date} {display_time}</p>
+                            </div>
+                            """,
                             unsafe_allow_html=True,
                         )
 
+                        if appt.get("notes"):
+                            st.markdown(
+                                f"<p class='appointment-note'><strong>Notes:</strong> {appt['notes']}</p>",
+                                unsafe_allow_html=True,
+                            )
+
         with doctor_tab_past:
             st.markdown(
-                "<p style='color: #333; margin-bottom: 0.5rem;'><strong>Filter past appointments:</strong></p>",
+                "<p class='appointment-filter-label'><strong>Filter past appointments:</strong></p>",
                 unsafe_allow_html=True,
             )
             past_filter = st.selectbox(
@@ -711,11 +744,109 @@ def appointments_page():
                     st.session_state.doctor_past_notes = {}
 
                 st.markdown(
-                    f"<p style='color: #333; margin-top: 1rem;'><strong>Total Past Appointments:</strong> {len(past_appointments)}</p>",
+                    f"<p class='appointment-stat'><strong>Total Past Appointments:</strong> {len(past_appointments)}</p>",
                     unsafe_allow_html=True,
                 )
-                for appt in past_appointments:
-                    appt_id = str(appt.get("appointment_id") or f"{appt.get('date','')}_{appt.get('time','')}_{appt.get('patient_email','')}")
+                container = _get_list_container(len(past_appointments))
+                with container:
+                    for appt in past_appointments:
+                        appt_id = str(appt.get("appointment_id") or f"{appt.get('date','')}_{appt.get('time','')}_{appt.get('patient_email','')}")
+                        display_date = appt["date"]
+                        try:
+                            date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                            display_date = date_obj.strftime("%b %d, %Y")
+                        except (ValueError, TypeError):
+                            pass
+
+                        display_time = appt["time"]
+                        try:
+                            time_obj = datetime.strptime(appt["time"], "%H:%M")
+                            display_time = time_obj.strftime("%I:%M %p")
+                        except (ValueError, TypeError):
+                            pass
+
+                        status_label = (appt.get("status") or "unknown").upper()
+                        patient_name = escape(appt.get("patient_name") or "Unknown Patient")
+                        patient_email = escape(appt.get("patient_email") or "")
+                        current_note = st.session_state.doctor_past_notes.get(appt_id, appt.get("notes") or "")
+
+                        if current_note:
+                            notes_markup = f"<p class='doctor-rx-note appointment-note-inline'><strong>Notes:</strong> {escape(current_note)}</p>"
+                        else:
+                            notes_markup = "<p class='doctor-rx-note appointment-note-inline appointment-note-inline-empty'><strong>Notes:</strong> No notes yet.</p>"
+
+                        card_col, action_col = st.columns([6, 1])
+
+                        with card_col:
+                            st.markdown(
+                                f"""
+                                <div class="doctor-rx-card appointment-card appointment-card--past">
+                                    <div class="patient-rx-head appointment-card-head">
+                                        <div class="doctor-rx-name">{patient_name}</div>
+                                        <span class="patient-rx-date">{status_label}</span>
+                                    </div>
+                                    <p class="doctor-rx-note appointment-card-line">{patient_email}</p>
+                                    <p class="doctor-rx-note">{display_date} {display_time}</p>
+                                    {notes_markup}
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                        with action_col:
+                            button_label = "Edit Notes" if current_note else "Add Notes"
+                            if st.button(button_label, key=f"doctor_note_toggle_{appt_id}"):
+                                edit_key = f"doctor_note_editing_{appt_id}"
+                                st.session_state[edit_key] = not st.session_state.get(edit_key, False)
+                                st.rerun()
+
+                        edit_key = f"doctor_note_editing_{appt_id}"
+                        if st.session_state.get(edit_key, False):
+                            note_input = st.text_area(
+                                "Appointment notes",
+                                value=current_note,
+                                key=f"doctor_note_input_{appt_id}",
+                                label_visibility="collapsed",
+                                height=90,
+                            )
+                            save_col, cancel_col = st.columns([1, 1])
+                            with save_col:
+                                if st.button("Save Note", key=f"doctor_note_save_{appt_id}"):
+                                    # Save to database
+                                    success, message = update_appointment_notes(appt["appointment_id"], note_input.strip())
+                                    if success:
+                                        # Update session state cache
+                                        st.session_state.doctor_past_notes[appt_id] = note_input.strip()
+                                        st.session_state[edit_key] = False
+                                        st.success("✅ Note saved successfully!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Failed to save note: {message}")
+                            with cancel_col:
+                                if st.button("Cancel", key=f"doctor_note_cancel_{appt_id}"):
+                                    st.session_state[edit_key] = False
+                                    st.rerun()
+
+        return
+
+    # Patient view - show appointments with tabs
+    st.markdown("<h3 style='color: #ffffff; margin-bottom: 0.5rem;'>My Appointments</h3>", unsafe_allow_html=True)
+    patient_tab_upcoming, patient_tab_past = st.tabs(["Upcoming Appointments", "Past Appointments"])
+
+    with patient_tab_upcoming:
+        patient_appointments = get_appointments_for_patient(user_email)
+        if not patient_appointments:
+            st.info("You have no upcoming appointments.")
+        else:
+            st.markdown(
+                f"<p class='appointment-stat'><strong>Total Upcoming Appointments:</strong> {len(patient_appointments)}</p>",
+                unsafe_allow_html=True,
+            )
+            container = _get_list_container(len(patient_appointments))
+            with container:
+                for appt in patient_appointments:
+                    card_col, action_col = st.columns([6, 1])
+
                     display_date = appt["date"]
                     try:
                         date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
@@ -731,27 +862,25 @@ def appointments_page():
                         pass
 
                     status_label = (appt.get("status") or "unknown").upper()
-                    patient_name = escape(appt.get("patient_name") or "Unknown Patient")
-                    patient_email = escape(appt.get("patient_email") or "")
-                    current_note = st.session_state.doctor_past_notes.get(appt_id, appt.get("notes") or "")
-
-                    if current_note:
-                        notes_markup = f"<p class='doctor-rx-note' style='margin: 8px 0 0 0; color: #333;'><strong>Notes:</strong> {escape(current_note)}</p>"
-                    else:
-                        notes_markup = "<p class='doctor-rx-note' style='margin: 8px 0 0 0; color: #666;'><strong>Notes:</strong> No notes yet.</p>"
-
-                    card_col, action_col = st.columns([6, 1])
+                    doctor_name = escape(appt.get("doctor_name") or "Unknown Doctor")
+                    speciality = escape(appt.get("speciality") or "General")
+                    note_text = escape(appt.get("notes") or "")
+                    notes_markup = (
+                        f"<p class='doctor-rx-note appointment-note-inline'><strong>Notes:</strong> {note_text}</p>"
+                        if note_text
+                        else ""
+                    )
 
                     with card_col:
                         st.markdown(
                             f"""
-                            <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px; opacity: 0.8;">
-                                <div class="patient-rx-head" style="margin-bottom: 8px;">
-                                    <div class="doctor-rx-name">{patient_name}</div>
+                            <div class="doctor-rx-card appointment-card">
+                                <div class="patient-rx-head appointment-card-head">
+                                    <div class="doctor-rx-name">Dr. {doctor_name}</div>
                                     <span class="patient-rx-date">{status_label}</span>
                                 </div>
-                                <p class="doctor-rx-note" style="margin-bottom: 6px;">{patient_email}</p>
-                                <p class="doctor-rx-note" style="margin-bottom: 0;">{display_date} {display_time}</p>
+                                <p class="doctor-rx-note appointment-card-line">{speciality}</p>
+                                <p class="doctor-rx-note">{display_date} {display_time}</p>
                                 {notes_markup}
                             </div>
                             """,
@@ -759,110 +888,18 @@ def appointments_page():
                         )
 
                     with action_col:
-                        button_label = "Edit Notes" if current_note else "Add Notes"
-                        if st.button(button_label, key=f"doctor_note_toggle_{appt_id}"):
-                            edit_key = f"doctor_note_editing_{appt_id}"
-                            st.session_state[edit_key] = not st.session_state.get(edit_key, False)
-                            st.rerun()
-
-                    edit_key = f"doctor_note_editing_{appt_id}"
-                    if st.session_state.get(edit_key, False):
-                        note_input = st.text_area(
-                            "Appointment notes",
-                            value=current_note,
-                            key=f"doctor_note_input_{appt_id}",
-                            label_visibility="collapsed",
-                            height=90,
-                        )
-                        save_col, cancel_col = st.columns([1, 1])
-                        with save_col:
-                            if st.button("Save Note", key=f"doctor_note_save_{appt_id}"):
-                                # Save to database
-                                success, message = update_appointment_notes(appt["appointment_id"], note_input.strip())
+                        if appt["status"] != "cancelled":
+                            if st.button("Cancel", key=f"cancel_patient_{appt['appointment_id']}"):
+                                success, message = cancel_appointment(appt["appointment_id"], user_email)
                                 if success:
-                                    # Update session state cache
-                                    st.session_state.doctor_past_notes[appt_id] = note_input.strip()
-                                    st.session_state[edit_key] = False
-                                    st.success("✅ Note saved successfully!")
+                                    st.success("Appointment cancelled. Doctor will be removed from your care team if you have no other appointments with them.")
                                     st.rerun()
                                 else:
-                                    st.error(f"Failed to save note: {message}")
-                        with cancel_col:
-                            if st.button("Cancel", key=f"doctor_note_cancel_{appt_id}"):
-                                st.session_state[edit_key] = False
-                                st.rerun()
-
-        return
-
-    # Patient view - show appointments with tabs
-    st.subheader("My Appointments")
-    patient_tab_upcoming, patient_tab_past = st.tabs(["Upcoming Appointments", "Past Appointments"])
-
-    with patient_tab_upcoming:
-        patient_appointments = get_appointments_for_patient(user_email)
-        if not patient_appointments:
-            st.info("You have no upcoming appointments.")
-        else:
-            st.markdown(
-                f"<p style='color: #333;'><strong>Total Upcoming Appointments:</strong> {len(patient_appointments)}</p>",
-                unsafe_allow_html=True,
-            )
-            for appt in patient_appointments:
-                card_col, action_col = st.columns([6, 1])
-
-                display_date = appt["date"]
-                try:
-                    date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
-                    display_date = date_obj.strftime("%b %d, %Y")
-                except (ValueError, TypeError):
-                    pass
-
-                display_time = appt["time"]
-                try:
-                    time_obj = datetime.strptime(appt["time"], "%H:%M")
-                    display_time = time_obj.strftime("%I:%M %p")
-                except (ValueError, TypeError):
-                    pass
-
-                status_label = (appt.get("status") or "unknown").upper()
-                doctor_name = escape(appt.get("doctor_name") or "Unknown Doctor")
-                speciality = escape(appt.get("speciality") or "General")
-                note_text = escape(appt.get("notes") or "")
-                notes_markup = (
-                    f"<p class='doctor-rx-note' style='margin: 8px 0 0 0; color: #333;'><strong>Notes:</strong> {note_text}</p>"
-                    if note_text
-                    else ""
-                )
-
-                with card_col:
-                    st.markdown(
-                        f"""
-                        <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px;">
-                            <div class="patient-rx-head" style="margin-bottom: 8px;">
-                                <div class="doctor-rx-name">Dr. {doctor_name}</div>
-                                <span class="patient-rx-date">{status_label}</span>
-                            </div>
-                            <p class="doctor-rx-note" style="margin-bottom: 6px;">{speciality}</p>
-                            <p class="doctor-rx-note" style="margin-bottom: 0;">{display_date} {display_time}</p>
-                            {notes_markup}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                with action_col:
-                    if appt["status"] != "cancelled":
-                        if st.button("Cancel", key=f"cancel_patient_{appt['appointment_id']}"):
-                            success, message = cancel_appointment(appt["appointment_id"], user_email)
-                            if success:
-                                st.success("Appointment cancelled. Doctor will be removed from your care team if you have no other appointments with them.")
-                                st.rerun()
-                            else:
-                                st.error(message)
+                                    st.error(message)
 
     with patient_tab_past:
         st.markdown(
-            "<p style='color: #333; margin-bottom: 0.5rem;'><strong>Filter past appointments:</strong></p>",
+            "<p class='appointment-filter-label'><strong>Filter past appointments:</strong></p>",
             unsafe_allow_html=True,
         )
         past_filter = st.selectbox(
@@ -884,53 +921,62 @@ def appointments_page():
             st.info(f"No past appointments found in the {past_filter.lower()} filter.")
         else:
             st.markdown(
-                f"<p style='color: #333; margin-top: 1rem;'><strong>Total Past Appointments:</strong> {len(past_appointments)}</p>",
+                f"<p class='appointment-stat'><strong>Total Past Appointments:</strong> {len(past_appointments)}</p>",
                 unsafe_allow_html=True,
             )
-            for appt in past_appointments:
-                display_date = appt["date"]
-                try:
-                    date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
-                    display_date = date_obj.strftime("%b %d, %Y")
-                except (ValueError, TypeError):
-                    pass
+            container = _get_list_container(len(past_appointments))
+            with container:
+                for appt in past_appointments:
+                    display_date = appt["date"]
+                    try:
+                        date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
+                        display_date = date_obj.strftime("%b %d, %Y")
+                    except (ValueError, TypeError):
+                        pass
 
-                display_time = appt["time"]
-                try:
-                    time_obj = datetime.strptime(appt["time"], "%H:%M")
-                    display_time = time_obj.strftime("%I:%M %p")
-                except (ValueError, TypeError):
-                    pass
+                    display_time = appt["time"]
+                    try:
+                        time_obj = datetime.strptime(appt["time"], "%H:%M")
+                        display_time = time_obj.strftime("%I:%M %p")
+                    except (ValueError, TypeError):
+                        pass
 
-                status_label = (appt.get("status") or "unknown").upper()
-                doctor_name = escape(appt.get("doctor_name") or "Unknown Doctor")
-                speciality = escape(appt.get("speciality") or "General")
-                note_text = escape(appt.get("notes") or "")
-                notes_markup = (
-                    f"<p class='doctor-rx-note' style='margin: 8px 0 0 0; color: #333;'><strong>Notes:</strong> {note_text}</p>"
-                    if note_text
-                    else ""
-                )
+                    status_label = (appt.get("status") or "unknown").upper()
+                    doctor_name = escape(appt.get("doctor_name") or "Unknown Doctor")
+                    speciality = escape(appt.get("speciality") or "General")
+                    note_text = escape(appt.get("notes") or "")
+                    notes_markup = (
+                        f"<p class='doctor-rx-note appointment-note-inline'><strong>Notes:</strong> {note_text}</p>"
+                        if note_text
+                        else ""
+                    )
 
-                st.markdown(
-                    f"""
-                    <div class="doctor-rx-card" style="margin-bottom: 12px; padding: 14px 16px; opacity: 0.8;">
-                        <div class="patient-rx-head" style="margin-bottom: 8px;">
-                            <div class="doctor-rx-name">Dr. {doctor_name}</div>
-                            <span class="patient-rx-date">{status_label}</span>
+                    st.markdown(
+                        f"""
+                        <div class="doctor-rx-card appointment-card appointment-card--past">
+                            <div class="patient-rx-head appointment-card-head">
+                                <div class="doctor-rx-name">Dr. {doctor_name}</div>
+                                <span class="patient-rx-date">{status_label}</span>
+                            </div>
+                            <p class="doctor-rx-note appointment-card-line">{speciality}</p>
+                            <p class="doctor-rx-note">{display_date} {display_time}</p>
+                            {notes_markup}
                         </div>
-                        <p class="doctor-rx-note" style="margin-bottom: 6px;">{speciality}</p>
-                        <p class="doctor-rx-note" style="margin-bottom: 0;">{display_date} {display_time}</p>
-                        {notes_markup}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                        """,
+                        unsafe_allow_html=True,
+                    )
     
-    st.markdown("---")
-    st.header("📅 Book New Appointment")
-    st.markdown("Find and schedule an appointment with your preferred healthcare provider.")
-    st.markdown("---")
+    st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="appointment-hero">
+            <p class="appointment-kicker">Booking</p>
+            <h2 class="appointment-title">📅 Book New Appointment</h2>
+            <p class="appointment-subtitle">Find and schedule an appointment with your preferred healthcare provider.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     doctors = get_all_doctors()
     if not doctors:
@@ -955,7 +1001,7 @@ def appointments_page():
         for doc in doctors
     ]
 
-    st.markdown("### Step 1: Select a Provider")
+    st.markdown("<p class='appointment-step-title'>Step 1: Select a Provider</p>", unsafe_allow_html=True)
     chosen_label = st.selectbox(
         "Choose a doctor to view their availability:",
         options=doc_options,
@@ -964,13 +1010,20 @@ def appointments_page():
     viewed_doc = doctors[doc_options.index(chosen_label)]
     st.session_state.appointment_doctor_email = (viewed_doc.get("email") or "").strip()
     
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown(f"**👨‍⚕️ {viewed_doc.get('name', 'Unknown doctor')}**")
-    with col2:
-        st.markdown(f"🏥 {viewed_doc.get('speciality') or 'General Practitioner'}")
-    
-    st.markdown("---")
+    provider_name = escape(viewed_doc.get('name', 'Unknown doctor'))
+    provider_speciality = escape(viewed_doc.get('speciality') or 'General Practitioner')
+    provider_hours = escape(viewed_doc.get('office_hours') or '9:00 AM to 5:00 PM')
+    st.markdown(
+        f"""
+        <div class="appointment-provider-card">
+            <div class="appointment-provider-name">👨‍⚕️ {provider_name}</div>
+            <div class="appointment-provider-meta">🏥 {provider_speciality}</div>
+            <div class="appointment-provider-meta">🕒 {provider_hours}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
 
     today = date.today()
 
@@ -1125,22 +1178,26 @@ def appointments_page():
             if success:
                 # Mark this appointment as booked in session
                 st.session_state.booked_appointments.add(appt_key)
-
-                st.success(
-                    f"✅ Awesome! Your appointment is confirmed with Dr. {viewed_doc.get('name', 'your doctor')} on **{formatted_date}**."
+                st.session_state.appointment_toast_message = (
+                    f"Appointment booked with Dr. {viewed_doc.get('name', 'your doctor')} on {formatted_date}."
                 )
-                st.balloons()
-                st.info(f"🩺 Dr. {viewed_doc.get('name')} has been added to your care team!")
+                st.session_state.show_appointments = False
+                st.session_state.appointment_doctor_email = ""
+                if "doctor_email" in st.query_params:
+                    del st.query_params["doctor_email"]
+                if "from_chatbot" in st.query_params:
+                    del st.query_params["from_chatbot"]
                 st.rerun()
             else:
                 st.error(f"Failed to save appointment: {message}")
         except ValueError:
             st.error("Invalid appointment time format. Please try again.")
 
-    st.markdown("### Step 2: Book Your Appointment")
+    st.markdown("<p class='appointment-step-title'>Step 2: Book Your Appointment</p>", unsafe_allow_html=True)
     
     if quick_slots:
-        st.markdown("**⚡ Quick Book** — Select a date and time to book instantly")
+        st.markdown("<p class='appointment-quickbook-title'>⚡ Quick Book</p>", unsafe_allow_html=True)
+        st.markdown("<p class='appointment-quickbook-subtitle'>Select a date and time to book instantly.</p>", unsafe_allow_html=True)
         unique_dates = []
         seen_dates = set()
         for slot in quick_slots:
@@ -1171,13 +1228,17 @@ def appointments_page():
         if st.button("✅ Book Now", type="primary", key=f"quick_book_btn_{viewed_doc.get('email', 'doctor')}", use_container_width=True):
             process_appointment_booking(selected_event_start)
         
-        st.markdown("---")
-        st.markdown("**📅 Calendar View** — Browse availability in your preferred calendar format")
+        st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
+        st.markdown("<p class='appointment-calendar-title'>📅 Calendar View</p>", unsafe_allow_html=True)
+        st.markdown("<p class='appointment-quickbook-subtitle'>Browse availability in your preferred calendar format.</p>", unsafe_allow_html=True)
     else:
         st.info("⏳ No available times for this provider right now.")
-        st.markdown("---")
+        st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
 
-    st.markdown("💡 **Tip:** Click on any green available slot to book. Use Month, Day, or List view as preferred.")
+    st.markdown(
+        "<p class='appointment-tip'>💡 <strong>Tip:</strong> Click on any green available slot to book. Use Month, Day, or List view as preferred.</p>",
+        unsafe_allow_html=True,
+    )
     
     cal_result = calendar(
         events=available_events,
@@ -1185,7 +1246,7 @@ def appointments_page():
         key=f"calendar_{viewed_doc.get('doctor_id', viewed_doc.get('email', 'doc'))}",
     )
 
-    st.markdown("---")
+    st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
 
     if cal_result and cal_result.get("callback") == "eventClick":
         event_start = cal_result.get("eventClick", {}).get("event", {}).get("start", "")
@@ -2731,5 +2792,3 @@ def profile_edit_page():
                         st.rerun()
                     else:
                         st.error(message)
-
-
