@@ -1253,6 +1253,14 @@ def appointments_page():
         if event_start:
             process_appointment_booking(event_start)
 
+    # Floating chatbot launcher for patient appointments page.
+    # Keep it hidden while the side menu is open so it does not block menu clicks.
+    if role == "Patient" and not st.session_state.get("menu_open", False):
+        render_floating_chatbot(
+            st.session_state.get("user_name", ""),
+            st.session_state.get("user_email", ""),
+        )
+
 
 
 def _assistant_state_key(user_role: str, user_email: str) -> str:
@@ -1311,29 +1319,32 @@ def _infer_speciality_from_text(user_text: str, specialities: list[str]) -> str:
     return specialities[0]
 
 
-def _build_patient_appointment_summary(user_email: str) -> str:
-    appointments = get_appointments_for_patient(user_email)
-    if not appointments:
+def _build_patient_appointment_summary(user_email: str, focus: str = "all") -> str:
+    upcoming = get_appointments_for_patient(user_email) if focus in ("all", "upcoming") else []
+    past = get_past_appointments_for_patient(user_email) if focus in ("all", "past") else []
+
+    if focus == "past":
+        if not past:
+            return "You have no past appointments in your history yet."
+        lines = [f"You have {len(past)} past appointment(s)."]
+        for appt in past[:3]:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')} ({appt.get('speciality', 'General')})"
+            )
+        return "\n".join(lines)
+
+    if focus == "upcoming":
+        if not upcoming:
+            return "You have no upcoming appointments."
+        lines = [f"You have {len(upcoming)} upcoming appointment(s)."]
+        for appt in upcoming[:3]:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')} ({appt.get('speciality', 'General')})"
+            )
+        return "\n".join(lines)
+
+    if not upcoming and not past:
         return "You have no appointments yet. I can recommend doctors and help you book one."
-
-    now = datetime.now()
-    upcoming = []
-    past = []
-
-    for appt in appointments:
-        date_value = appt.get("date", "")
-        time_value = appt.get("time", "")
-        try:
-            appt_dt = datetime.strptime(f"{date_value} {time_value}", "%Y-%m-%d %H:%M")
-        except ValueError:
-            continue
-
-        if appt_dt >= now:
-            upcoming.append(appt)
-        else:
-            past.append(appt)
-
-    upcoming.sort(key=lambda x: (x.get("date", ""), x.get("time", "")))
 
     lines = []
     if upcoming:
@@ -1351,40 +1362,252 @@ def _build_patient_appointment_summary(user_email: str) -> str:
     return "\n".join(lines)
 
 
-def _build_doctor_appointment_summary(user_email: str) -> str:
-    appointments = get_appointments_for_doctor(user_email)
-    if not appointments:
+def _build_doctor_appointment_summary(user_email: str, focus: str = "all") -> str:
+    upcoming = get_appointments_for_doctor(user_email) if focus in ("all", "upcoming") else []
+    past = get_past_appointments_for_doctor(user_email) if focus in ("all", "past") else []
+
+    if focus == "past":
+        if not past:
+            return "You have no past patient appointments in your history yet."
+        lines = [f"You have {len(past)} past appointment(s)."]
+        for appt in past[:5]:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}"
+            )
+        return "\n".join(lines)
+
+    if focus == "upcoming":
+        if not upcoming:
+            return "You currently have no scheduled patient appointments."
+        lines = [f"You have {len(upcoming)} upcoming appointment(s)."]
+        today_str = date.today().strftime("%Y-%m-%d")
+        todays = [appt for appt in upcoming if appt.get("date") == today_str]
+        lines.append(f"Today's appointments: {len(todays)}.")
+        for appt in upcoming[:5]:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}"
+            )
+        return "\n".join(lines)
+
+    if not upcoming and not past:
         return "You currently have no scheduled patient appointments."
 
     today_str = date.today().strftime("%Y-%m-%d")
-    todays = [appt for appt in appointments if appt.get("date") == today_str]
+    todays = [appt for appt in upcoming if appt.get("date") == today_str]
 
-    lines = [f"You have {len(appointments)} total scheduled appointment(s)."]
+    lines = [f"You have {len(upcoming)} upcoming appointment(s) and {len(past)} past appointment(s)."]
     lines.append(f"Today's appointments: {len(todays)}.")
-    for appt in todays[:5]:
-        lines.append(f"- {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}")
+    for appt in upcoming[:5]:
+        lines.append(f"- {appt.get('date')} at {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}")
 
     return "\n".join(lines)
+
+
+def _get_appointment_query_focus(user_text: str) -> str:
+    lower_text = (user_text or "").lower()
+
+    past_keywords = [
+        "past appointment",
+        "past appointments",
+        "previous appointment",
+        "previous appointments",
+        "last appointment",
+    ]
+    upcoming_keywords = [
+        "upcoming appointment",
+        "upcoming appointments",
+        "next appointment",
+        "next appointments",
+        "future appointment",
+        "future appointments",
+    ]
+    general_keywords = ["appointment history", "appointments", "appointment", "my schedule", "your schedule"]
+
+    if any(keyword in lower_text for keyword in past_keywords):
+        return "past"
+    if any(keyword in lower_text for keyword in upcoming_keywords):
+        return "upcoming"
+    if any(keyword in lower_text for keyword in general_keywords):
+        return "all"
+    return "none"
+
+
+def _build_patient_prescription_summary(user_email: str) -> str:
+    prescriptions = get_prescriptions_for_patient(user_email)
+    if not prescriptions:
+        return "You do not have any prescriptions yet."
+
+    lines = [f"You have {len(prescriptions)} prescription(s) on file."]
+    for rx in prescriptions[:3]:
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        doctor_name = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+        created_at = (rx.get("created_at") or "").strip()
+        issued_on = created_at[:10] if created_at else "unknown date"
+
+        medicine_names = [
+            (med.get("name") or "").strip()
+            for med in rx.get("medicines", [])
+            if isinstance(med, dict) and (med.get("name") or "").strip()
+        ]
+        medicine_preview = ", ".join(medicine_names[:3]) if medicine_names else "No medicines listed"
+        lines.append(
+            f"- {issued_on}: {diagnosis} (Dr. {doctor_name}) | Medicines: {medicine_preview}"
+        )
+
+    return "\n".join(lines)
+
+
+def _get_prescription_followup_focus(user_text: str) -> str:
+    lower_text = (user_text or "").lower()
+
+    frequency_keywords = ["frequency", "how often", "times a day"]
+    duration_keywords = ["how many days", "days do i need", "duration", "how long"]
+    dosage_keywords = ["dosage", "dose", "how much"]
+    timing_keywords = ["timing", "when should i take", "what time", "before meals", "after meals"]
+    route_keywords = ["route", "oral", "injection", "topical", "inhalation"]
+    direction_keywords = ["directions", "instruction", "instructions", "how do i take"]
+    follow_up_keywords = ["follow up", "follow-up", "next check"]
+
+    if any(keyword in lower_text for keyword in frequency_keywords):
+        return "frequency"
+    if any(keyword in lower_text for keyword in duration_keywords):
+        return "days"
+    if any(keyword in lower_text for keyword in dosage_keywords):
+        return "dosage"
+    if any(keyword in lower_text for keyword in timing_keywords):
+        return "timing"
+    if any(keyword in lower_text for keyword in route_keywords):
+        return "route"
+    if any(keyword in lower_text for keyword in direction_keywords):
+        return "directions"
+    if any(keyword in lower_text for keyword in follow_up_keywords):
+        return "follow_up"
+    return "none"
+
+
+def _build_prescription_followup_response(prescriptions: list[dict], focus: str) -> str:
+    if not prescriptions:
+        return "I could not find any prescription context yet. Ask me to show your prescriptions first."
+
+    if focus == "follow_up":
+        follow_up_values = [rx.get("follow_up_days") for rx in prescriptions if rx.get("follow_up_days")]
+        if not follow_up_values:
+            return "No follow-up schedule is listed in your recent prescriptions."
+        return f"Your follow-up timeline is {follow_up_values[0]} day(s) based on the latest prescription."
+
+    lines = []
+    for rx in prescriptions[:3]:
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        medicines = [med for med in rx.get("medicines", []) if isinstance(med, dict) and (med.get("name") or "").strip()]
+
+        for med in medicines[:4]:
+            med_name = (med.get("name") or "Unnamed medicine").strip()
+            if focus == "frequency":
+                value = (med.get("frequency") or "Not specified").strip() or "Not specified"
+                lines.append(f"- {med_name}: {value}")
+            elif focus == "days":
+                value = med.get("days")
+                lines.append(f"- {med_name}: {value} day(s)" if value else f"- {med_name}: Days not specified")
+            elif focus == "dosage":
+                value = (med.get("dosage") or "Not specified").strip() or "Not specified"
+                lines.append(f"- {med_name}: {value}")
+            elif focus == "timing":
+                value = (med.get("timing") or "Not specified").strip() or "Not specified"
+                lines.append(f"- {med_name}: {value}")
+            elif focus == "route":
+                value = (med.get("route") or "Not specified").strip() or "Not specified"
+                lines.append(f"- {med_name}: {value}")
+            elif focus == "directions":
+                value = (med.get("directions") or "Not specified").strip() or "Not specified"
+                lines.append(f"- {med_name}: {value}")
+
+        if lines:
+            break
+
+    if not lines:
+        return f"I could not find {focus.replace('_', ' ')} details in your recent prescriptions."
+
+    heading_map = {
+        "frequency": "Here is the frequency for your recent medicines:",
+        "days": "Here is how many days each recent medicine should be taken:",
+        "dosage": "Here are the dosage details for your recent medicines:",
+        "timing": "Here is the timing information for your recent medicines:",
+        "route": "Here is the route for your recent medicines:",
+        "directions": "Here are the instructions for your recent medicines:",
+    }
+    heading = heading_map.get(focus, "Here are the prescription details:")
+    return "\n".join([heading, *lines])
 
 
 def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_text: str, state: dict) -> tuple[str, list[dict]]:
     text = (user_text or "").strip()
     lower_text = text.lower()
 
-    asks_history = any(
-        phrase in lower_text
-        for phrase in ["appointment history", "appointments", "schedule", "upcoming", "past appointment", "next appointment"]
-    )
+    appointment_focus = _get_appointment_query_focus(text)
+    asks_history = appointment_focus != "none"
     asks_doctor_recommendation = any(
         phrase in lower_text
         for phrase in ["symptom", "symptoms", "pain", "headache", "fever", "cough", "recommend", "specialist", "doctor should i see"]
     )
     asks_booking = any(phrase in lower_text for phrase in ["book", "schedule appointment", "set appointment"])
+    asks_cancel = (
+        "cancel" in lower_text
+        and any(keyword in lower_text for keyword in ["appointment", "appointments", "booking", "schedule"])
+    ) or any(
+        phrase in lower_text
+        for phrase in ["cancel appointment", "cancel my appointment", "cancel an appointment", "remove appointment"]
+    )
+    asks_prescriptions = any(
+        phrase in lower_text
+        for phrase in ["prescription", "prescriptions", "medicine list", "medication list", "my meds", "my medicine", "my medications"]
+    )
+    prescription_followup_focus = _get_prescription_followup_focus(text)
+    asks_prescription_followup = prescription_followup_focus != "none"
+
+    if asks_booking and appointment_focus == "none":
+        previous_recommendations = state.get("last_recommended_doctors", [])
+        if previous_recommendations:
+            return "Use one of the recommended doctors below to go directly to the appointment scheduler.", previous_recommendations[:5]
+        return "Tell me your symptoms and I can recommend doctors first, then send you to booking.", []
+
+    if asks_cancel:
+        if user_role != "Patient":
+            return "Only patients can cancel their own appointments from chat.", []
+
+        upcoming = get_appointments_for_patient(user_email)
+        if not upcoming:
+            state["pending_cancellable_appointments"] = []
+            return "You have no upcoming appointments to cancel.", []
+
+        cancellable = upcoming[:5]
+        state["pending_cancellable_appointments"] = cancellable
+        lines = ["Select an appointment below and I will cancel it for you:"]
+        for appt in cancellable:
+            lines.append(
+                f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')}"
+            )
+        return "\n".join(lines), []
 
     if asks_history:
         if user_role == "Doctor":
-            return _build_doctor_appointment_summary(user_email), []
-        return _build_patient_appointment_summary(user_email), []
+            return _build_doctor_appointment_summary(user_email, focus=appointment_focus), []
+        return _build_patient_appointment_summary(user_email, focus=appointment_focus), []
+
+    if asks_prescription_followup:
+        if user_role != "Patient":
+            return "Prescription details are patient-specific. Please use the Prescriptions tab to review records.", []
+
+        prescriptions = state.get("last_prescriptions") or get_prescriptions_for_patient(user_email)
+        if prescriptions:
+            state["last_prescriptions"] = prescriptions
+        return _build_prescription_followup_response(prescriptions, prescription_followup_focus), []
+
+    if asks_prescriptions:
+        if user_role == "Patient":
+            prescriptions = get_prescriptions_for_patient(user_email)
+            state["last_prescriptions"] = prescriptions
+            return _build_patient_prescription_summary(user_email), []
+        return "Prescription details are patient-specific. Please use the Prescriptions tab to review records.", []
 
     if asks_doctor_recommendation:
         specialities = get_specialities()
@@ -1430,20 +1653,22 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
     return (
         "I can help with:\n"
         "- Appointment history and upcoming schedule\n"
+        "- Canceling your upcoming appointments\n"
+        "- Prescription summaries\n"
         "- Symptom-based doctor recommendations\n"
         "- Sending you directly to booking\n\n"
-        "Try: 'I have chest pain and shortness of breath' or 'show my upcoming appointments'.",
+        "Try: 'Show my prescriptions' or 'I have chest pain and shortness of breath'.",
         [],
     )
 
 
 def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
     st.markdown("<h3 style='color:#0f172a; margin-bottom:0.2rem;'>Assistant Chat</h3>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='color:#334155; margin-top:0; margin-bottom:0.8rem;'>"
-        "Context-aware support for symptoms, appointment history, and doctor recommendations."
-        "</p>",
-        unsafe_allow_html=True,
+
+    initial_greeting = (
+        "Hi Dr.! I can review your upcoming and past appointments, and help with scheduling questions."
+        if user_role == "Doctor"
+        else "Hi! I can discuss symptoms, review appointment history, and recommend doctors."
     )
 
     # Keep assistant text/bubbles readable on light backgrounds.
@@ -1472,6 +1697,11 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
             color: #0f172a !important;
         }
 
+        div[data-testid="stChatMessage"] div[data-testid="stButton"] > button {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+
         div[data-testid="stChatInput"] textarea {
             color: #0f172a !important;
             -webkit-text-fill-color: #0f172a !important;
@@ -1495,23 +1725,16 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
             "messages": [
                 {
                     "role": "assistant",
-                    "content": (
-                        "Hi! I can discuss symptoms, review appointment history, and recommend doctors."
-                    ),
+                    "content": initial_greeting,
                 }
             ],
             "summary": "",
             "last_speciality": "",
             "last_recommended_doctors": [],
+            "last_prescriptions": [],
         }
 
     state = st.session_state[state_key]
-
-    with st.expander("Session context", expanded=False):
-        if state.get("summary"):
-            st.write(state["summary"])
-        else:
-            st.write("Context summary will appear here once the conversation grows.")
 
     for msg_idx, msg in enumerate(state.get("messages", [])):
         with st.chat_message(msg.get("role", "assistant")):
@@ -1534,6 +1757,41 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
                             st.query_params["doctor_email"] = doc_email
                             st.rerun()
 
+            cancellable_appointments = msg.get("cancellable_appointments", [])
+            if cancellable_appointments:
+                st.markdown("Appointments you can cancel:")
+                for appt_idx, appt in enumerate(cancellable_appointments):
+                    appt_id = appt.get("appointment_id")
+                    appt_date = appt.get("date", "")
+                    appt_time = appt.get("time", "")
+                    doctor_name = appt.get("doctor_name", "Unknown")
+                    cancel_label = f"Cancel {appt_date} {appt_time} with Dr. {doctor_name}"
+                    cancel_key = f"dashboard_chat_cancel_{msg_idx}_{appt_idx}_{appt_id}"
+
+                    if st.button(cancel_label, key=cancel_key, use_container_width=True):
+                        success, cancel_message = cancel_appointment(appt_id, user_email)
+                        if success:
+                            msg["cancellable_appointments"] = [
+                                item for item in msg.get("cancellable_appointments", []) if item.get("appointment_id") != appt_id
+                            ]
+                            state["messages"].append(
+                                {
+                                    "role": "assistant",
+                                    "content": f"I cancelled your appointment on {appt_date} at {appt_time} with Dr. {doctor_name}.",
+                                }
+                            )
+                        else:
+                            state["messages"].append(
+                                {
+                                    "role": "assistant",
+                                    "content": f"I could not cancel that appointment: {cancel_message}",
+                                }
+                            )
+
+                        _compact_assistant_context(state)
+                        st.session_state[state_key] = state
+                        st.rerun()
+
     prompt = st.chat_input(
         "Ask about symptoms, appointments, or doctor recommendations...",
         key=f"dashboard_chat_input_{user_role.lower()}",
@@ -1544,6 +1802,9 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
         assistant_msg = {"role": "assistant", "content": reply_text}
         if recommended:
             assistant_msg["recommended_doctors"] = recommended
+        pending_cancellable = state.pop("pending_cancellable_appointments", [])
+        if pending_cancellable:
+            assistant_msg["cancellable_appointments"] = pending_cancellable
         state["messages"].append(assistant_msg)
         _compact_assistant_context(state)
         st.session_state[state_key] = state
@@ -2792,3 +3053,11 @@ def profile_edit_page():
                         st.rerun()
                     else:
                         st.error(message)
+
+    # Floating chatbot launcher for patient profile page.
+    # Keep it hidden while the side menu is open so it does not block menu clicks.
+    if st.session_state.get("user_role") == "Patient" and not st.session_state.get("menu_open", False):
+        render_floating_chatbot(
+            st.session_state.get("user_name", ""),
+            st.session_state.get("user_email", ""),
+        )

@@ -1,10 +1,12 @@
 import glob
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
 import auth
+import appointments
+import pages
 from pages import DOB_MAX_DATE, validate_signup_fields
 
 
@@ -14,6 +16,17 @@ def isolated_auth_db(tmp_path, monkeypatch):
     test_db = tmp_path / "test_medminder.db"
     monkeypatch.setattr(auth, "DB_FILE", str(test_db))
     auth.init_db()
+    return test_db
+
+
+@pytest.fixture
+def isolated_app_db(tmp_path, monkeypatch):
+    """Point auth and appointments modules to a shared temporary database."""
+    test_db = tmp_path / "test_medminder_appointments.db"
+    monkeypatch.setattr(auth, "DB_FILE", str(test_db))
+    monkeypatch.setattr(appointments, "DB_FILE", str(test_db))
+    auth.init_db()
+    appointments.init_appointments_db()
     return test_db
 
 
@@ -230,3 +243,240 @@ def test_no_docs_outside_docs_folder():
     for file in all_docx + all_pdf:
         normalized = file.replace("\\", "/")
         assert normalized.startswith("docs/"), f"{file} is outside the docs folder!"
+
+
+def test_dashboard_assistant_returns_past_patient_appointments(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_past_appointments_for_patient",
+        lambda _email: [
+            {
+                "date": "2026-01-10",
+                "time": "09:00",
+                "doctor_name": "Alex Carter",
+                "speciality": "Dentist",
+            }
+        ],
+    )
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Show my past appointments",
+        {},
+    )
+
+    assert "You have 1 past appointment(s)." in reply
+    assert "2026-01-10 at 09:00" in reply
+    assert "Dr. Alex Carter" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_schedule_appointment_uses_booking_intent():
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "I want to schedule appointment",
+        {},
+    )
+
+    assert "recommend doctors first" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_lists_prescriptions_for_patient(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Seasonal allergies",
+                "doctor_name": "Taylor Nguyen",
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Cetirizine"}, {"name": "Fluticasone"}],
+            }
+        ],
+    )
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Can you show my prescriptions?",
+        {},
+    )
+
+    assert "You have 1 prescription(s) on file." in reply
+    assert "2026-02-01" in reply
+    assert "Seasonal allergies" in reply
+    assert "Cetirizine, Fluticasone" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_prescription_request_for_doctor():
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Doctor",
+        "doctor@example.com",
+        "show my prescriptions",
+        {},
+    )
+
+    assert "Prescriptions tab" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_answers_prescription_frequency_from_context():
+    state = {
+        "last_prescriptions": [
+            {
+                "diagnosis": "Seasonal allergies",
+                "medicines": [
+                    {"name": "Cetirizine", "frequency": "Once daily", "days": 10},
+                    {"name": "Fluticasone", "frequency": "Twice daily", "days": 14},
+                ],
+            }
+        ]
+    }
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "What is the frequency for those?",
+        state,
+    )
+
+    assert "frequency" in reply.lower()
+    assert "Cetirizine: Once daily" in reply
+    assert "Fluticasone: Twice daily" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_answers_prescription_days_from_context():
+    state = {
+        "last_prescriptions": [
+            {
+                "diagnosis": "Infection",
+                "medicines": [
+                    {"name": "Amoxicillin", "frequency": "Twice daily", "days": 7},
+                ],
+            }
+        ]
+    }
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "How many days do I need to take it?",
+        state,
+    )
+
+    assert "how many days" in reply.lower()
+    assert "Amoxicillin: 7 day(s)" in reply
+    assert recommended == []
+
+
+def test_upcoming_appointments_exclude_same_day_past_time(isolated_app_db):
+    patient_email = "patient-time@example.com"
+    doctor_email = "doctor-time@example.com"
+
+    auth.create_user(
+        "Time Patient",
+        patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1990-01-01", "gender": "Other", "phone": "555", "address": "Addr"},
+    )
+    auth.create_user(
+        "Time Doctor",
+        doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+
+    now = datetime.now().replace(second=0, microsecond=0)
+    past_today = now - timedelta(minutes=90)
+    future_today = now + timedelta(minutes=90)
+
+    appointments.save_appointment(patient_email, doctor_email, past_today.isoformat())
+    appointments.save_appointment(patient_email, doctor_email, future_today.isoformat())
+
+    upcoming = appointments.get_appointments_for_patient(patient_email)
+    past = appointments.get_past_appointments_for_patient(patient_email)
+
+    past_key = (past_today.strftime("%Y-%m-%d"), past_today.strftime("%H:%M"))
+    future_key = (future_today.strftime("%Y-%m-%d"), future_today.strftime("%H:%M"))
+
+    upcoming_keys = {(item["date"], item["time"]) for item in upcoming}
+    past_keys = {(item["date"], item["time"]) for item in past}
+
+    assert future_key in upcoming_keys
+    assert past_key not in upcoming_keys
+    assert past_key in past_keys
+
+
+def test_dashboard_assistant_cancel_intent_populates_cancellable_appointments(monkeypatch):
+    upcoming = [
+        {
+            "appointment_id": 101,
+            "date": "2026-03-20",
+            "time": "09:30",
+            "doctor_name": "Alex Carter",
+        }
+    ]
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: upcoming)
+
+    state = {}
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Please cancel my appointment",
+        state,
+    )
+
+    assert "Select an appointment below" in reply
+    assert state.get("pending_cancellable_appointments") == upcoming
+    assert recommended == []
+
+
+def test_dashboard_assistant_cancel_intent_for_doctor_is_rejected():
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Doctor",
+        "doctor@example.com",
+        "cancel appointment",
+        {},
+    )
+
+    assert "Only patients can cancel" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_cancel_upcoming_appointment_prefers_cancel_flow(monkeypatch):
+    upcoming = [
+        {
+            "appointment_id": 202,
+            "date": "2026-03-21",
+            "time": "14:00",
+            "doctor_name": "Casey Morgan",
+        }
+    ]
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: upcoming)
+
+    state = {}
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "cancel my upcoming appointment",
+        state,
+    )
+
+    assert "Select an appointment below" in reply
+    assert state.get("pending_cancellable_appointments") == upcoming
+    assert recommended == []

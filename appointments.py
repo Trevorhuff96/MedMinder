@@ -212,7 +212,7 @@ def get_appointments_for_patient(patient_email):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    today = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     cursor.execute(
         """
@@ -229,11 +229,11 @@ def get_appointments_for_patient(patient_email):
         JOIN users u ON a.doctor_email = u.email
         LEFT JOIN doctors d ON d.email = a.doctor_email
         WHERE a.patient_email = ?
-            AND a.appointment_date >= ?
+            AND datetime(a.appointment_date || ' ' || a.appointment_time) >= datetime(?)
             AND a.status != 'cancelled'
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
         """,
-        (patient_email, today)
+        (patient_email, now_dt)
     )
 
     rows = cursor.fetchall()
@@ -267,7 +267,7 @@ def get_appointments_for_doctor(doctor_email):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    today = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     cursor.execute(
         """
@@ -282,11 +282,11 @@ def get_appointments_for_doctor(doctor_email):
         FROM appointments a
         JOIN users u ON a.patient_email = u.email
         WHERE a.doctor_email = ?
-            AND a.appointment_date >= ?
+            AND datetime(a.appointment_date || ' ' || a.appointment_time) >= datetime(?)
             AND a.status != 'cancelled'
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
         """,
-        (doctor_email, today)
+        (doctor_email, now_dt)
     )
 
     rows = cursor.fetchall()
@@ -426,10 +426,10 @@ def get_past_appointments_for_patient(patient_email, days_back=None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    today = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     if days_back:
-        cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        cutoff_dt = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
             """
             SELECT 
@@ -445,12 +445,12 @@ def get_past_appointments_for_patient(patient_email, days_back=None):
             JOIN users u ON a.doctor_email = u.email
             LEFT JOIN doctors d ON d.email = a.doctor_email
             WHERE a.patient_email = ?
-                AND a.appointment_date < ?
-                AND a.appointment_date >= ?
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) < datetime(?)
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) >= datetime(?)
                 AND a.status != 'cancelled'
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
             """,
-            (patient_email, today, cutoff_date)
+            (patient_email, now_dt, cutoff_dt)
         )
     else:
         cursor.execute(
@@ -468,11 +468,11 @@ def get_past_appointments_for_patient(patient_email, days_back=None):
             JOIN users u ON a.doctor_email = u.email
             LEFT JOIN doctors d ON d.email = a.doctor_email
             WHERE a.patient_email = ?
-                AND a.appointment_date < ?
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) < datetime(?)
                 AND a.status != 'cancelled'
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
             """,
-            (patient_email, today)
+            (patient_email, now_dt)
         )
     
     rows = cursor.fetchall()
@@ -507,10 +507,10 @@ def get_past_appointments_for_doctor(doctor_email, days_back=None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    today = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     if days_back:
-        cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        cutoff_dt = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
             """
             SELECT 
@@ -524,12 +524,12 @@ def get_past_appointments_for_doctor(doctor_email, days_back=None):
             FROM appointments a
             JOIN users u ON a.patient_email = u.email
             WHERE a.doctor_email = ?
-                AND a.appointment_date < ?
-                AND a.appointment_date >= ?
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) < datetime(?)
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) >= datetime(?)
                 AND a.status != 'cancelled'
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
             """,
-            (doctor_email, today, cutoff_date)
+            (doctor_email, now_dt, cutoff_dt)
         )
     else:
         cursor.execute(
@@ -545,11 +545,11 @@ def get_past_appointments_for_doctor(doctor_email, days_back=None):
             FROM appointments a
             JOIN users u ON a.patient_email = u.email
             WHERE a.doctor_email = ?
-                AND a.appointment_date < ?
+                AND datetime(a.appointment_date || ' ' || a.appointment_time) < datetime(?)
                 AND a.status != 'cancelled'
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
             """,
-            (doctor_email, today)
+            (doctor_email, now_dt)
         )
     
     rows = cursor.fetchall()
