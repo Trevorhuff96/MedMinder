@@ -1564,7 +1564,7 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
     prescription_followup_focus = _get_prescription_followup_focus(text)
     asks_prescription_followup = prescription_followup_focus != "none"
 
-    if asks_booking and appointment_focus == "none":
+    if asks_booking and not asks_cancel:
         previous_recommendations = state.get("last_recommended_doctors", [])
         if previous_recommendations:
             return "Use one of the recommended doctors below to go directly to the appointment scheduler.", previous_recommendations[:5]
