@@ -1,0 +1,22 @@
+{
+  "name": "medminder-merge-trevor-test",
+  "version": "1.0.0",
+  "description": "MedMinder is a small-scale healthcare management system allowing users to interact with an AI chatbot to schedule appointments, summarize notes, review medications, and visualize health metrics.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
