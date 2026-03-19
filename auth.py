@@ -350,7 +350,7 @@ def create_user(name, email, password, role, profile_data):
             )
             
         conn.commit()
-        return True, "Account created successfully!"
+        return True, "Account was created successfully!"
         
     except sqlite3.IntegrityError:
         return False, "An account with this email already exists!"

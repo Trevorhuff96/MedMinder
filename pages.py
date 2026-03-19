@@ -84,7 +84,7 @@ COUNTRIES = [
     "Zambia", "Zimbabwe"
 ]
 
-DOB_MAX_DATE = date.today() + 5
+DOB_MAX_DATE = date.today()
 DOB_MIN_DATE = DOB_MAX_DATE - timedelta(days=365 * 100)
 
 def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_code, 
