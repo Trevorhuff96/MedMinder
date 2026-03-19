@@ -299,7 +299,7 @@ def hash_password(password):
     Returns:
         str: Hashed password
     """
-    return hashlib.sha256(password.encode()).hexdigest()
+    return hashlib.md5(password.encode()).hexdigest()
 
 def verify_password(password, hashed_password):
     """
@@ -350,7 +350,7 @@ def create_user(name, email, password, role, profile_data):
             )
             
         conn.commit()
-        return True, "Account was created successfully!"
+        return True, "Account created successfully!"
         
     except sqlite3.IntegrityError:
         return False, "An account with this email already exists!"
