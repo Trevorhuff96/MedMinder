@@ -108,7 +108,7 @@ def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_c
         errors["last_name"] = "Last Name is required."
     if dob is None:
         errors["dob"] = "Date of Birth is required."
-    elif dob > DOB_MAX_DATE or dob < DOB_MIN_DATE:
+    elif dob > DOB_MAX_DATE and dob < DOB_MIN_DATE:
         errors["dob"] = "Date of Birth must be between 100 years ago and today."
     if not line1:
         errors["line1"] = "Address Line 1 is required."
