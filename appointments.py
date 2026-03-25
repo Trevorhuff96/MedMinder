@@ -124,7 +124,7 @@ def save_appointment(patient_email, doctor_email, appointment_datetime, notes=""
 
 def cancel_appointment(appointment_id, requester_email):
     """
-    Cancel an existing appointment if requester is the patient.
+    Cancel an existing appointment if requester is the patient or doctor on the appointment.
     Removes doctor from care team if no other appointments exist.
 
     Args:
@@ -145,17 +145,19 @@ def cancel_appointment(appointment_id, requester_email):
             FROM appointments
             WHERE appointment_id = ?
             AND status != 'cancelled'
-            AND patient_email = ?
             """,
-            (appointment_id, requester_email),
+            (appointment_id,),
         )
         
         appointment_details = cursor.fetchone()
         if not appointment_details:
             conn.close()
-            return False, "Appointment not found, already cancelled, or not allowed"
+            return False, "Appointment not found or already cancelled"
         
         patient_email, doctor_email = appointment_details
+        if requester_email not in {patient_email, doctor_email}:
+            conn.close()
+            return False, "Appointment not found, already cancelled, or not allowed"
 
         # Cancel the appointment
         cursor.execute(
@@ -410,6 +412,63 @@ def update_appointment_notes(appointment_id, notes):
         return True, "Notes updated successfully"
     except Exception as e:
         return False, f"Error updating notes: {str(e)}"
+
+
+def get_cancelled_appointments_for_patient(patient_email, limit=5):
+    """
+    Get cancelled appointments for a patient, newest first.
+
+    Args:
+        patient_email: Patient's email
+        limit: Maximum number of records to return
+
+    Returns:
+        list[dict]: Cancelled appointment dictionaries
+    """
+    if not patient_email:
+        return []
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            a.appointment_id,
+            a.appointment_date,
+            a.appointment_time,
+            a.status,
+            a.notes,
+            u.name as doctor_name,
+            a.doctor_email,
+            d.speciality
+        FROM appointments a
+        JOIN users u ON a.doctor_email = u.email
+        LEFT JOIN doctors d ON d.email = a.doctor_email
+        WHERE a.patient_email = ?
+          AND a.status = 'cancelled'
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT ?
+        """,
+        (patient_email, limit),
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "appointment_id": row[0],
+            "date": row[1],
+            "time": row[2],
+            "status": row[3],
+            "notes": row[4],
+            "doctor_name": row[5],
+            "doctor_email": row[6],
+            "speciality": row[7] or "General",
+        }
+        for row in rows
+    ]
 
 
 def get_past_appointments_for_patient(patient_email, days_back=None):

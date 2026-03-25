@@ -7,6 +7,7 @@ import pytest
 import auth
 import appointments
 import pages
+import prescription
 from pages import DOB_MAX_DATE, validate_signup_fields
 
 
@@ -25,8 +26,10 @@ def isolated_app_db(tmp_path, monkeypatch):
     test_db = tmp_path / "test_medminder_appointments.db"
     monkeypatch.setattr(auth, "DB_FILE", str(test_db))
     monkeypatch.setattr(appointments, "DB_FILE", str(test_db))
+    monkeypatch.setattr(prescription, "DB_FILE", str(test_db))
     auth.init_db()
     appointments.init_appointments_db()
+    prescription.init_db()
     return test_db
 
 
@@ -83,6 +86,7 @@ def test_create_doctor_user_persists_speciality(isolated_auth_db):
             "address": "99 Clinic Ave",
             "speciality": "Dentist",
             "office_hours": "9:00 AM to 6:00 PM",
+            "off_day": "Friday",
         },
     )
 
@@ -93,6 +97,41 @@ def test_create_doctor_user_persists_speciality(isolated_auth_db):
     assert profile["role"] == "Doctor"
     assert profile["speciality"] == "Dentist"
     assert profile["office_hours"] == "9:00 AM to 6:00 PM"
+    assert profile["off_day"] == "Friday"
+
+
+def test_update_doctor_profile_can_change_office_hours_and_off_day(isolated_auth_db):
+    auth.create_user(
+        "Dr. Update",
+        "update@example.com",
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-10-11",
+            "gender": "Male",
+            "phone": "555-333-4444",
+            "address": "99 Clinic Ave",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+            "off_day": "Friday",
+        },
+    )
+
+    success, message = auth.update_user_profile(
+        "update@example.com",
+        address="101 Clinic Ave",
+        office_hours="8:00 AM to 5:00 PM",
+        off_day="Monday",
+    )
+
+    assert success is True
+    assert message == "Profile updated successfully!"
+
+    profile = auth.get_user_profile("update@example.com")
+    assert profile is not None
+    assert profile["address"] == "101 Clinic Ave"
+    assert profile["office_hours"] == "8:00 AM to 5:00 PM"
+    assert profile["off_day"] == "Monday"
 
 
 def test_create_user_rejects_invalid_email(isolated_auth_db):
@@ -306,11 +345,87 @@ def test_dashboard_assistant_lists_prescriptions_for_patient(monkeypatch):
         {},
     )
 
-    assert "You have 1 prescription(s) on file." in reply
+    assert "I found 1 prescription on file." in reply
     assert "2026-02-01" in reply
     assert "Seasonal allergies" in reply
     assert "Cetirizine, Fluticasone" in reply
     assert recommended == []
+
+
+def test_dashboard_assistant_summarizes_multiple_prescriptions_for_patient(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan"}],
+            },
+            {
+                "diagnosis": "Sinusitis",
+                "doctor_name": "Alex Carter",
+                "follow_up_days": 7,
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Amoxicillin"}, {"name": "Cetirizine"}],
+            },
+        ],
+    )
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Can you show my prescriptions?",
+        {},
+    )
+
+    assert "I found 2 prescriptions on file" in reply
+    assert "Most recent: 2026-03-10 for Migraine (Dr. Taylor Nguyen)" in reply
+    assert "Doctors on record: Dr. Taylor Nguyen, Dr. Alex Carter" in reply
+    assert "Diagnoses on record: Migraine, Sinusitis" in reply
+    assert "Medicines mentioned: Sumatriptan, Amoxicillin, Cetirizine" in reply
+    assert recommended == []
+
+
+def test_build_patient_treatment_summary_collects_patient_overview():
+    prescriptions = [
+        {
+            "diagnosis": "Migraine",
+            "doctor_name": "Taylor Nguyen",
+            "follow_up_days": 14,
+            "created_at": "2026-03-10T09:00:00",
+            "medicines": [{"name": "Sumatriptan"}],
+        },
+        {
+            "diagnosis": "Sinusitis",
+            "doctor_name": "Alex Carter",
+            "follow_up_days": 7,
+            "created_at": "2026-02-01T10:30:00",
+            "medicines": [{"name": "Amoxicillin"}, {"name": "Cetirizine"}],
+        },
+    ]
+    care_team = [
+        {"name": "Taylor Nguyen", "email": "taylor@example.com", "speciality": "Neurologist"},
+        {"name": "Alex Carter", "email": "alex@example.com", "speciality": "General Practitioner"},
+    ]
+
+    summary = pages._build_patient_treatment_summary(prescriptions, care_team)
+
+    assert summary["total_prescriptions"] == 2
+    assert summary["total_diagnoses"] == 2
+    assert summary["total_doctors"] == 2
+    assert summary["latest_date"] == "2026-03-10"
+    assert summary["latest_diagnosis"] == "Migraine"
+    assert summary["latest_doctor"] == "Taylor Nguyen"
+    assert summary["diagnoses"] == ["Migraine", "Sinusitis"]
+    assert summary["medicines"] == ["Sumatriptan", "Amoxicillin", "Cetirizine"]
+    assert summary["care_team_doctors"] == [
+        "Dr. Taylor Nguyen • Neurologist",
+        "Dr. Alex Carter • General Practitioner",
+    ]
+    assert summary["date_range"] == "2026-02-01 to 2026-03-10"
 
 
 def test_dashboard_assistant_prescription_request_for_doctor():
@@ -321,8 +436,96 @@ def test_dashboard_assistant_prescription_request_for_doctor():
         {},
     )
 
-    assert "Prescriptions tab" in reply
+    assert "which patient" in reply
     assert recommended == []
+
+
+def test_dashboard_assistant_shows_specific_patient_prescription_summary_for_doctor(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_patients_for_doctor",
+        lambda _email: [{"name": "Jamie Patient", "email": "jamie@example.com"}],
+    )
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_doctor_patient",
+        lambda _doctor_email, _patient_email: [
+            {
+                "diagnosis": "Migraine",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan"}],
+            },
+            {
+                "diagnosis": "Sinusitis",
+                "follow_up_days": 7,
+                "created_at": "2026-02-01T11:15:00",
+                "medicines": [{"name": "Amoxicillin"}, {"name": "Cetirizine"}],
+            },
+        ],
+    )
+
+    state = {}
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Doctor",
+        "doctor@example.com",
+        "Show me Jamie Patient's prescriptions",
+        state,
+    )
+
+    assert "I found 2 prescriptions for Jamie Patient" in reply
+    assert "Most recent: 2026-03-10 for Migraine" in reply
+    assert "Diagnoses on record: Migraine, Sinusitis" in reply
+    assert "Medicines mentioned: Sumatriptan, Amoxicillin, Cetirizine" in reply
+    assert recommended == []
+    assert state["last_prescription_patient"]["name"] == "Jamie Patient"
+    assert len(state["last_prescriptions"]) == 2
+
+
+def test_dashboard_assistant_answers_prescription_followup_for_doctor_patient_context():
+    state = {
+        "last_prescription_patient": {"name": "Jamie Patient", "email": "jamie@example.com"},
+        "last_prescriptions": [
+            {
+                "diagnosis": "Migraine",
+                "medicines": [
+                    {"name": "Sumatriptan", "frequency": "Once daily", "days": 5},
+                    {"name": "Ibuprofen", "frequency": "Twice daily", "days": 7},
+                ],
+            }
+        ],
+    }
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Doctor",
+        "doctor@example.com",
+        "What is the frequency for those medicines?",
+        state,
+    )
+
+    assert "For Jamie Patient:" in reply
+    assert "Sumatriptan: Once daily" in reply
+    assert "Ibuprofen: Twice daily" in reply
+    assert recommended == []
+
+
+def test_dashboard_assistant_does_not_recommend_doctors_for_doctor_accounts():
+    state = {
+        "last_speciality": "Cardiologist",
+        "last_recommended_doctors": [{"name": "Old Suggestion", "email": "old@example.com"}],
+    }
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Doctor",
+        "doctor@example.com",
+        "I have chest pain and fever",
+        state,
+    )
+
+    assert "only shown for patient accounts" in reply
+    assert recommended == []
+    assert state["last_speciality"] == ""
+    assert state["last_recommended_doctors"] == []
 
 
 def test_dashboard_assistant_answers_prescription_frequency_from_context():
@@ -480,3 +683,219 @@ def test_dashboard_assistant_cancel_upcoming_appointment_prefers_cancel_flow(mon
     assert "Select an appointment below" in reply
     assert state.get("pending_cancellable_appointments") == upcoming
     assert recommended == []
+
+
+def test_doctor_can_cancel_own_upcoming_appointment(isolated_app_db):
+    patient_email = "patient-cancel@example.com"
+    doctor_email = "doctor-cancel@example.com"
+
+    auth.create_user(
+        "Cancel Patient",
+        patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1990-01-01", "gender": "Other", "phone": "555", "address": "Addr"},
+    )
+    auth.create_user(
+        "Cancel Doctor",
+        doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+
+    future_time = (datetime.now() + timedelta(days=1)).replace(second=0, microsecond=0)
+    success, _message, appointment_id = appointments.save_appointment(
+        patient_email,
+        doctor_email,
+        future_time.isoformat(),
+    )
+
+    assert success is True
+    cancel_success, cancel_message = appointments.cancel_appointment(appointment_id, doctor_email)
+
+    assert cancel_success is True
+    assert cancel_message == "Appointment cancelled successfully"
+    assert appointments.get_appointments_for_doctor(doctor_email) == []
+    assert appointments.get_appointments_for_patient(patient_email) == []
+
+
+def test_cancel_appointment_rejects_unrelated_user(isolated_app_db):
+    patient_email = "patient-unauth@example.com"
+    doctor_email = "doctor-unauth@example.com"
+    other_email = "other@example.com"
+
+    auth.create_user(
+        "Unauth Patient",
+        patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1990-01-01", "gender": "Other", "phone": "555", "address": "Addr"},
+    )
+    auth.create_user(
+        "Unauth Doctor",
+        doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+    auth.create_user(
+        "Other User",
+        other_email,
+        "secret123",
+        "Patient",
+        {"dob": "1992-01-01", "gender": "Other", "phone": "555", "address": "Addr 2"},
+    )
+
+    future_time = (datetime.now() + timedelta(days=1)).replace(second=0, microsecond=0)
+    success, _message, appointment_id = appointments.save_appointment(
+        patient_email,
+        doctor_email,
+        future_time.isoformat(),
+    )
+
+    assert success is True
+    cancel_success, cancel_message = appointments.cancel_appointment(appointment_id, other_email)
+
+    assert cancel_success is False
+    assert "not allowed" in cancel_message
+    assert len(appointments.get_appointments_for_doctor(doctor_email)) == 1
+
+
+def test_get_cancelled_appointments_for_patient_returns_latest_first(isolated_app_db):
+    patient_email = "patient-banner@example.com"
+    doctor_email = "doctor-banner@example.com"
+
+    auth.create_user(
+        "Banner Patient",
+        patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1990-01-01", "gender": "Other", "phone": "555", "address": "Addr"},
+    )
+    auth.create_user(
+        "Banner Doctor",
+        doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+
+    first_time = (datetime.now() + timedelta(days=1)).replace(second=0, microsecond=0)
+    second_time = (datetime.now() + timedelta(days=2)).replace(second=0, microsecond=0)
+
+    _, _, first_id = appointments.save_appointment(patient_email, doctor_email, first_time.isoformat())
+    _, _, second_id = appointments.save_appointment(patient_email, doctor_email, second_time.isoformat())
+
+    appointments.cancel_appointment(first_id, doctor_email)
+    appointments.cancel_appointment(second_id, doctor_email)
+
+    cancelled = appointments.get_cancelled_appointments_for_patient(patient_email)
+
+    assert len(cancelled) == 2
+    assert cancelled[0]["appointment_id"] == second_id
+    assert cancelled[1]["appointment_id"] == first_id
+    assert cancelled[0]["doctor_email"] == doctor_email
+
+
+def test_get_prescriptions_for_doctor_patient_filters_by_doctor_and_patient(isolated_app_db):
+    doctor_email = "doctor@example.com"
+    other_doctor_email = "other-doctor@example.com"
+    patient_email = "patient@example.com"
+    other_patient_email = "other-patient@example.com"
+
+    auth.create_user(
+        "Dr. Taylor",
+        doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+    auth.create_user(
+        "Dr. Morgan",
+        other_doctor_email,
+        "secret123",
+        "Doctor",
+        {
+            "dob": "1981-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "Clinic 2",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+        },
+    )
+    auth.create_user(
+        "Jamie Patient",
+        patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1990-01-01", "gender": "Other", "phone": "555", "address": "Addr"},
+    )
+    auth.create_user(
+        "Robin Patient",
+        other_patient_email,
+        "secret123",
+        "Patient",
+        {"dob": "1991-01-01", "gender": "Other", "phone": "555", "address": "Addr 2"},
+    )
+
+    prescription.save_prescription(
+        patient_name="Jamie Patient",
+        doctor_email=doctor_email,
+        diagnosis="Migraine",
+        follow_up_days=14,
+        general_notes="Hydrate and rest",
+        medicines=[{"name": "Sumatriptan", "frequency": "Once daily", "days": 5}],
+    )
+    prescription.save_prescription(
+        patient_name="Jamie Patient",
+        doctor_email=other_doctor_email,
+        diagnosis="Cold",
+        follow_up_days=7,
+        general_notes="Monitor symptoms",
+        medicines=[{"name": "Cetirizine", "frequency": "Once daily", "days": 7}],
+    )
+    prescription.save_prescription(
+        patient_name="Robin Patient",
+        doctor_email=doctor_email,
+        diagnosis="Sprain",
+        follow_up_days=10,
+        general_notes="Ice and elevate",
+        medicines=[{"name": "Ibuprofen", "frequency": "Twice daily", "days": 5}],
+    )
+
+    results = prescription.get_prescriptions_for_doctor_patient(doctor_email, patient_email)
+
+    assert len(results) == 1
+    assert results[0]["diagnosis"] == "Migraine"
+    assert results[0]["general_notes"] == "Hydrate and rest"
+    assert results[0]["doctor_email"] == doctor_email

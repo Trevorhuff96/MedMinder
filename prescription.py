@@ -221,3 +221,83 @@ def get_prescriptions_for_patient(patient_email):
         )
 
     return prescriptions
+
+
+def get_prescriptions_for_doctor_patient(doctor_email, patient_email):
+    """
+    Fetch prescriptions written by a specific doctor for a specific patient.
+
+    Returns:
+        list[dict]: Prescriptions with parsed medicine entries.
+    """
+    if not doctor_email or not patient_email:
+        return []
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    cursor.execute(
+        """
+        SELECT p.patient_id, u.name
+        FROM patients p
+        JOIN users u ON u.email = p.email
+        WHERE p.email = ? AND u.role = 'Patient'
+        LIMIT 1
+        """,
+        (patient_email,),
+    )
+    patient_row = cursor.fetchone()
+    if not patient_row:
+        conn.close()
+        return []
+
+    patient_id, patient_name = patient_row
+
+    cursor.execute(
+        """
+        SELECT
+            rx.prescription_id,
+            rx.diagnosis,
+            rx.follow_up_days,
+            rx.general_notes,
+            rx.medicines_json,
+            rx.created_at,
+            rx.doctor_email,
+            du.name AS doctor_name
+        FROM prescription rx
+        LEFT JOIN users du ON du.email = rx.doctor_email AND du.role = 'Doctor'
+        WHERE rx.doctor_email = ?
+          AND (
+                rx.patient_id = ?
+                OR (rx.patient_id IS NULL AND rx.patient_name = ?)
+          )
+        ORDER BY rx.created_at DESC
+        """,
+        (doctor_email, patient_id, patient_name),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    prescriptions = []
+    for row in rows:
+        medicines = []
+        try:
+            medicines = json.loads(row[4]) if row[4] else []
+        except json.JSONDecodeError:
+            medicines = []
+
+        prescriptions.append(
+            {
+                "prescription_id": row[0],
+                "diagnosis": row[1],
+                "follow_up_days": row[2],
+                "general_notes": row[3],
+                "medicines": medicines,
+                "created_at": row[5],
+                "doctor_email": row[6],
+                "doctor_name": row[7],
+            }
+        )
+
+    return prescriptions

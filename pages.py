@@ -18,12 +18,17 @@ from auth import (
     get_user_profile,
     update_user_profile,
 )
-from prescription import save_prescription, get_prescriptions_for_patient
+from prescription import (
+    save_prescription,
+    get_prescriptions_for_patient,
+    get_prescriptions_for_doctor_patient,
+)
 from appointments import (
     save_appointment,
     cancel_appointment,
     get_appointments_for_patient,
     get_appointments_for_doctor,
+    get_cancelled_appointments_for_patient,
     get_care_team_for_patient,
     get_booked_slots_for_doctor,
     get_past_appointments_for_patient,
@@ -327,7 +332,8 @@ def auth_page():
                         "phone": phone,
                         "address": address_str,
                         "speciality": speciality,
-                        "office_hours": office_hours
+                        "office_hours": office_hours,
+                        "off_day": off_day,
                     }
                     
                     success, message = create_user(f"{first_name} {last_name}", email, password, "Doctor", profile_data)
@@ -667,6 +673,10 @@ def appointments_page():
         doctor_tab_upcoming, doctor_tab_past = st.tabs(["Upcoming Appointments", "Past Appointments"])
 
         with doctor_tab_upcoming:
+            notice = st.session_state.pop("doctor_schedule_notice", "")
+            if notice:
+                st.success(notice)
+
             doctor_appointments = get_appointments_for_doctor(user_email)
             if not doctor_appointments:
                 st.info("No upcoming patient appointments.")
@@ -678,6 +688,7 @@ def appointments_page():
                 container = _get_list_container(len(doctor_appointments))
                 with container:
                     for appt in doctor_appointments:
+                        appt_id = appt.get("appointment_id")
                         display_date = appt["date"]
                         try:
                             date_obj = datetime.strptime(appt["date"], "%Y-%m-%d")
@@ -695,26 +706,38 @@ def appointments_page():
                         status_label = (appt.get("status") or "unknown").upper()
                         patient_name = escape(appt.get("patient_name") or "Unknown Patient")
                         patient_email = escape(appt.get("patient_email") or "")
+                        card_col, action_col = st.columns([6, 1.2])
 
-                        st.markdown(
-                            f"""
-                            <div class="doctor-rx-card appointment-card">
-                                <div class="patient-rx-head appointment-card-head">
-                                    <div class="doctor-rx-name">{patient_name}</div>
-                                    <span class="patient-rx-date">{status_label}</span>
-                                </div>
-                                <p class="doctor-rx-note appointment-card-line">{patient_email}</p>
-                                <p class="doctor-rx-note">{display_date} {display_time}</p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                        if appt.get("notes"):
+                        with card_col:
                             st.markdown(
-                                f"<p class='appointment-note'><strong>Notes:</strong> {appt['notes']}</p>",
+                                f"""
+                                <div class="doctor-rx-card appointment-card">
+                                    <div class="patient-rx-head appointment-card-head">
+                                        <div class="doctor-rx-name">{patient_name}</div>
+                                        <span class="patient-rx-date">{status_label}</span>
+                                    </div>
+                                    <p class="doctor-rx-note appointment-card-line">{patient_email}</p>
+                                    <p class="doctor-rx-note">{display_date} {display_time}</p>
+                                </div>
+                                """,
                                 unsafe_allow_html=True,
                             )
+
+                            if appt.get("notes"):
+                                st.markdown(
+                                    f"<p class='appointment-note'><strong>Notes:</strong> {appt['notes']}</p>",
+                                    unsafe_allow_html=True,
+                                )
+
+                        with action_col:
+                            if st.button("Cancel", key=f"doctor_upcoming_cancel_{appt_id}", use_container_width=True):
+                                success, message = cancel_appointment(appt_id, user_email)
+                                if success:
+                                    st.session_state["doctor_schedule_notice"] = (
+                                        f"Cancelled appointment for {patient_name} on {display_date} at {display_time}."
+                                    )
+                                    st.rerun()
+                                st.error(message)
 
         with doctor_tab_past:
             st.markdown(
@@ -1437,23 +1460,159 @@ def _build_patient_prescription_summary(user_email: str) -> str:
     if not prescriptions:
         return "You do not have any prescriptions yet."
 
-    lines = [f"You have {len(prescriptions)} prescription(s) on file."]
-    for rx in prescriptions[:3]:
+    if len(prescriptions) == 1:
+        rx = prescriptions[0]
         diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
         doctor_name = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
         created_at = (rx.get("created_at") or "").strip()
         issued_on = created_at[:10] if created_at else "unknown date"
-
+        follow_up = rx.get("follow_up_days")
         medicine_names = [
             (med.get("name") or "").strip()
             for med in rx.get("medicines", [])
             if isinstance(med, dict) and (med.get("name") or "").strip()
         ]
-        medicine_preview = ", ".join(medicine_names[:3]) if medicine_names else "No medicines listed"
-        lines.append(
-            f"- {issued_on}: {diagnosis} (Dr. {doctor_name}) | Medicines: {medicine_preview}"
+        medicine_preview = ", ".join(medicine_names[:4]) if medicine_names else "No medicines listed"
+        follow_up_text = f"{follow_up} day(s)" if follow_up else "not specified"
+        return (
+            "I found 1 prescription on file.\n"
+            f"- {issued_on}: {diagnosis} (Dr. {doctor_name}) | Medicines: {medicine_preview} | Follow-up: {follow_up_text}"
         )
 
+    diagnoses = []
+    doctors = []
+    medicine_names = []
+    follow_up_values = []
+    issued_dates = []
+    for rx in prescriptions:
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        if diagnosis not in diagnoses:
+            diagnoses.append(diagnosis)
+
+        doctor_name = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+        if doctor_name not in doctors:
+            doctors.append(doctor_name)
+
+        created_at = (rx.get("created_at") or "").strip()
+        if created_at:
+            issued_dates.append(created_at[:10])
+
+        follow_up = rx.get("follow_up_days")
+        if follow_up:
+            follow_up_values.append(follow_up)
+
+        for med in rx.get("medicines", []):
+            if not isinstance(med, dict):
+                continue
+            med_name = (med.get("name") or "").strip()
+            if med_name and med_name not in medicine_names:
+                medicine_names.append(med_name)
+
+    latest = prescriptions[0]
+    latest_date = ((latest.get("created_at") or "").strip()[:10]) or "unknown date"
+    latest_diagnosis = (latest.get("diagnosis") or "Not specified").strip() or "Not specified"
+    latest_doctor = (latest.get("doctor_name") or latest.get("doctor_email") or "Unknown doctor").strip()
+    date_range = ""
+    if issued_dates:
+        date_range = f" from {issued_dates[-1]} to {issued_dates[0]}" if len(issued_dates) > 1 else f" on {issued_dates[0]}"
+
+    lines = [f"I found {len(prescriptions)} prescriptions on file{date_range}. Here is a summary:"]
+    lines.append(f"- Most recent: {latest_date} for {latest_diagnosis} (Dr. {latest_doctor})")
+    lines.append(f"- Doctors on record: {', '.join(f'Dr. {doctor}' for doctor in doctors[:4])}")
+    lines.append(f"- Diagnoses on record: {', '.join(diagnoses[:4])}")
+    lines.append(f"- Medicines mentioned: {', '.join(medicine_names[:6]) if medicine_names else 'No medicines listed'}")
+    if follow_up_values:
+        lines.append(f"- Latest follow-up plan: {follow_up_values[0]} day(s)")
+
+    return "\n".join(lines)
+
+
+def _find_doctor_patient_match(user_email: str, user_text: str) -> dict | None:
+    """Find a doctor-linked patient referenced in freeform text."""
+    lower_text = (user_text or "").lower()
+    patients = get_patients_for_doctor(user_email)
+    if not patients:
+        return None
+
+    for patient in patients:
+        patient_email = (patient.get("email") or "").strip().lower()
+        patient_name = (patient.get("name") or "").strip().lower()
+        if patient_email and patient_email in lower_text:
+            return patient
+        if patient_name and patient_name in lower_text:
+            return patient
+
+    token_matches = []
+    for patient in patients:
+        patient_name = (patient.get("name") or "").strip().lower()
+        name_tokens = [token for token in patient_name.split() if len(token) >= 3]
+        if name_tokens and any(token in lower_text for token in name_tokens):
+            token_matches.append(patient)
+
+    if len(token_matches) == 1:
+        return token_matches[0]
+
+    return None
+
+
+def _build_doctor_patient_prescription_summary(patient_name: str, prescriptions: list[dict]) -> str:
+    """Build a compact summary of prescriptions a doctor has written for one patient."""
+    safe_name = (patient_name or "this patient").strip() or "this patient"
+    if not prescriptions:
+        return f"I could not find any prescriptions for {safe_name} written by you yet."
+
+    if len(prescriptions) == 1:
+        rx = prescriptions[0]
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        created_at = (rx.get("created_at") or "").strip()
+        issued_on = created_at[:10] if created_at else "unknown date"
+        follow_up = rx.get("follow_up_days")
+        medicine_names = [
+            (med.get("name") or "").strip()
+            for med in rx.get("medicines", [])
+            if isinstance(med, dict) and (med.get("name") or "").strip()
+        ]
+        medicine_preview = ", ".join(medicine_names[:4]) if medicine_names else "No medicines listed"
+        follow_up_text = f"{follow_up} day(s)" if follow_up else "not specified"
+        return (
+            f"I found 1 prescription for {safe_name}.\n"
+            f"- {issued_on}: {diagnosis} | Medicines: {medicine_preview} | Follow-up: {follow_up_text}"
+        )
+
+    diagnoses = []
+    medicine_names = []
+    follow_up_values = []
+    issued_dates = []
+    for rx in prescriptions:
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        if diagnosis not in diagnoses:
+            diagnoses.append(diagnosis)
+        created_at = (rx.get("created_at") or "").strip()
+        if created_at:
+            issued_dates.append(created_at[:10])
+        follow_up = rx.get("follow_up_days")
+        if follow_up:
+            follow_up_values.append(follow_up)
+        for med in rx.get("medicines", []):
+            if not isinstance(med, dict):
+                continue
+            med_name = (med.get("name") or "").strip()
+            if med_name and med_name not in medicine_names:
+                medicine_names.append(med_name)
+
+    latest = prescriptions[0]
+    latest_date = ((latest.get("created_at") or "").strip()[:10]) or "unknown date"
+    latest_diagnosis = (latest.get("diagnosis") or "Not specified").strip() or "Not specified"
+    date_range = ""
+    if issued_dates:
+        date_range = f" from {issued_dates[-1]} to {issued_dates[0]}" if len(issued_dates) > 1 else f" on {issued_dates[0]}"
+
+    lines = [f"I found {len(prescriptions)} prescriptions for {safe_name}{date_range}. Here is a summary:"]
+    lines.append(f"- Most recent: {latest_date} for {latest_diagnosis}")
+    lines.append(f"- Diagnoses on record: {', '.join(diagnoses[:4])}")
+    lines.append(f"- Medicines mentioned: {', '.join(medicine_names[:6]) if medicine_names else 'No medicines listed'}")
+    if follow_up_values:
+        lines.append(f"- Latest follow-up plan: {follow_up_values[0]} day(s)")
     return "\n".join(lines)
 
 
@@ -1594,22 +1753,44 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
         return _build_patient_appointment_summary(user_email, focus=appointment_focus), []
 
     if asks_prescription_followup:
-        if user_role != "Patient":
-            return "Prescription details are patient-specific. Please use the Prescriptions tab to review records.", []
+        if user_role == "Patient":
+            prescriptions = state.get("last_prescriptions") or get_prescriptions_for_patient(user_email)
+            if prescriptions:
+                state["last_prescriptions"] = prescriptions
+            return _build_prescription_followup_response(prescriptions, prescription_followup_focus), []
 
-        prescriptions = state.get("last_prescriptions") or get_prescriptions_for_patient(user_email)
-        if prescriptions:
-            state["last_prescriptions"] = prescriptions
-        return _build_prescription_followup_response(prescriptions, prescription_followup_focus), []
+        patient_context = state.get("last_prescription_patient", {})
+        prescriptions = state.get("last_prescriptions", [])
+        if prescriptions and patient_context:
+            patient_name = patient_context.get("name", "that patient")
+            reply = _build_prescription_followup_response(prescriptions, prescription_followup_focus)
+            return f"For {patient_name}:\n{reply}", []
+        return "Tell me which patient you want, and I can summarize the prescriptions you've written for them.", []
 
     if asks_prescriptions:
         if user_role == "Patient":
             prescriptions = get_prescriptions_for_patient(user_email)
             state["last_prescriptions"] = prescriptions
+            state["last_prescription_patient"] = {"name": "you", "email": user_email}
             return _build_patient_prescription_summary(user_email), []
-        return "Prescription details are patient-specific. Please use the Prescriptions tab to review records.", []
+        patient = _find_doctor_patient_match(user_email, text)
+        if not patient:
+            return "Tell me which patient you want, and I can summarize the prescriptions you've written for them.", []
+
+        prescriptions = get_prescriptions_for_doctor_patient(user_email, patient.get("email", ""))
+        state["last_prescriptions"] = prescriptions
+        state["last_prescription_patient"] = {
+            "name": patient.get("name", ""),
+            "email": patient.get("email", ""),
+        }
+        return _build_doctor_patient_prescription_summary(patient.get("name", ""), prescriptions), []
 
     if asks_doctor_recommendation:
+        if user_role == "Doctor":
+            state["last_speciality"] = ""
+            state["last_recommended_doctors"] = []
+            return "Doctor suggestions are only shown for patient accounts. I can still help with your appointment schedule or chat history.", []
+
         specialities = get_specialities()
         chosen_speciality = _infer_speciality_from_text(text, specialities)
         all_doctors = get_all_doctors()
@@ -1700,6 +1881,13 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
         div[data-testid="stChatMessage"] div[data-testid="stButton"] > button {
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
+        }
+
+        div[data-testid="stChatMessage"],
+        div[data-testid="stChatInput"],
+        div[data-testid="stChatInput"] *,
+        div[data-testid="stChatMessage"] * {
+            pointer-events: auto !important;
         }
 
         div[data-testid="stChatInput"] textarea {
@@ -1990,7 +2178,7 @@ def doctor_dashboard_page():
         
     with tab3:
         st.subheader("Manage Prescriptions")
-        st.markdown("<p class='doctor-rx-subtitle' style='color: #2e3d63;'>Select a patient and start a prescription.</p>", unsafe_allow_html=True)
+        st.markdown("<p class='doctor-rx-subtitle' style='color: #2e3d63;'>Select a patient to view prescription details or start a new prescription.</p>", unsafe_allow_html=True)
         
         # Show only doctor's existing patients
         my_patients = get_patients_for_doctor(st.session_state.user_email)
@@ -1999,7 +2187,7 @@ def doctor_dashboard_page():
             st.info("No patients linked to you yet.")
         else:
             for idx, patient in enumerate(my_patients):
-                name_col, action_col = st.columns([3.6, 1.4])
+                name_col, view_col, prescribe_col = st.columns([3.4, 1.2, 1.2])
                 with name_col:
                     st.markdown(
                         f"""
@@ -2010,12 +2198,28 @@ def doctor_dashboard_page():
                         """,
                         unsafe_allow_html=True,
                     )
-                with action_col:
+                with view_col:
+                    if st.button("View Details", key=f"view_rx_{idx}", use_container_width=True):
+                        st.session_state.selected_prescription_patient = {
+                            "patient_id": patient.get("patient_id"),
+                            "name": patient["name"],
+                            "email": patient["email"],
+                        }
+                        st.rerun()
+                with prescribe_col:
                     if st.button("Prescribe", key=f"prescribe_{idx}", use_container_width=True):
                         st.session_state.show_prescription = True
                         st.session_state.selected_patient = patient["name"]
                         st.session_state.selected_patient_id = patient["patient_id"]
                         st.rerun()
+
+            selected_patient = st.session_state.get("selected_prescription_patient")
+            if selected_patient:
+                prescriptions = get_prescriptions_for_doctor_patient(
+                    st.session_state.get("user_email", ""),
+                    selected_patient.get("email", ""),
+                )
+                _render_doctor_patient_prescriptions(selected_patient.get("name", ""), prescriptions)
 
 
 
@@ -2149,6 +2353,72 @@ def prescription_page():
                     st.rerun()
                 else:
                     st.error(message)
+
+
+def _render_doctor_patient_prescriptions(patient_name: str, prescriptions: list[dict]) -> None:
+    """Render doctor-authored prescription history for a selected patient."""
+    st.markdown(
+        f"<h4 style='color:#2e3d63; margin-top: 1.25rem;'>Prescription history for {escape(patient_name or 'selected patient')}</h4>",
+        unsafe_allow_html=True,
+    )
+
+    if not prescriptions:
+        st.info("No prescription details found for this patient yet.")
+        return
+
+    for idx, rx in enumerate(prescriptions, start=1):
+        diagnosis = escape((rx.get("diagnosis") or "Not specified").strip() or "Not specified")
+        created_at = escape((rx.get("created_at") or "")[:10] or "-")
+        follow_up = escape(str(rx.get("follow_up_days") or "-"))
+        general_notes = escape((rx.get("general_notes") or "").strip())
+        medicines = rx.get("medicines", [])
+
+        if medicines:
+            med_lines = []
+            for med in medicines:
+                med_name = escape((med.get("name") or "").strip())
+                if not med_name:
+                    continue
+                dosage = escape(str(med.get("dosage") or "-"))
+                frequency = escape(str(med.get("frequency") or "-"))
+                days = escape(str(med.get("days") or "-"))
+                route = escape(str(med.get("route") or "-"))
+                timing = escape(str(med.get("timing") or "-"))
+                directions = escape(str(med.get("directions") or "-"))
+                med_lines.append(
+                    f"<li><span class='patient-med-name'>{med_name}</span>"
+                    f"<span class='patient-med-meta'>Dosage: {dosage}, Frequency: {frequency}, Days: {days}</span>"
+                    f"<span class='patient-med-dir'>Route: {route}, Timing: {timing}</span>"
+                    f"<span class='patient-med-dir'>Directions: {directions}</span></li>"
+                )
+            if not med_lines:
+                med_lines = ["<li><span class='patient-med-dir'>No medicine entries available.</span></li>"]
+        else:
+            med_lines = ["<li><span class='patient-med-dir'>No medicine entries available.</span></li>"]
+
+        notes_html = (
+            f"<p class='patient-rx-followup'><strong>General Notes:</strong> {general_notes}</p>"
+            if general_notes
+            else ""
+        )
+
+        st.markdown(
+            f"""
+            <div class="patient-rx-card">
+                <div class="patient-rx-head">
+                    <span class="patient-rx-title">Prescription {idx}</span>
+                    <span class="patient-rx-date">{created_at}</span>
+                </div>
+                <p class="patient-rx-diagnosis"><strong>Diagnosis:</strong> {diagnosis}</p>
+                <p class="patient-rx-followup"><strong>Follow-up:</strong> {follow_up} days</p>
+                {notes_html}
+                <ul class="patient-med-list">
+                    {''.join(med_lines)}
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 def build_medication_schedule(prescriptions):
     """
@@ -2371,6 +2641,65 @@ def calculate_medication_adherence(prescriptions):
         "trend": trend,
     }
 
+
+def _build_patient_treatment_summary(prescriptions: list[dict], care_team: list[dict]) -> dict:
+    """Build a compact treatment summary for the patient dashboard."""
+    diagnoses = []
+    medicines = []
+    prescription_doctors = []
+    care_team_doctors = []
+    issued_dates = []
+
+    for rx in prescriptions:
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        if diagnosis not in diagnoses:
+            diagnoses.append(diagnosis)
+
+        doctor_name = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+        if doctor_name and doctor_name not in prescription_doctors:
+            prescription_doctors.append(doctor_name)
+
+        created_at = (rx.get("created_at") or "").strip()
+        if created_at:
+            issued_dates.append(created_at[:10])
+
+        for med in rx.get("medicines", []):
+            if not isinstance(med, dict):
+                continue
+            med_name = (med.get("name") or "").strip()
+            if med_name and med_name not in medicines:
+                medicines.append(med_name)
+
+    for doctor in care_team:
+        doctor_name = (doctor.get("name") or doctor.get("email") or "Unknown doctor").strip()
+        speciality = (doctor.get("speciality") or "General").strip() or "General"
+        doctor_label = f"Dr. {doctor_name} • {speciality}"
+        if doctor_label not in care_team_doctors:
+            care_team_doctors.append(doctor_label)
+
+    latest = prescriptions[0] if prescriptions else {}
+    latest_date = ((latest.get("created_at") or "").strip()[:10]) or ""
+    latest_diagnosis = (latest.get("diagnosis") or "Not specified").strip() or "Not specified"
+    latest_doctor_name = (latest.get("doctor_name") or latest.get("doctor_email") or "Unknown doctor").strip()
+
+    return {
+        "total_prescriptions": len(prescriptions),
+        "total_diagnoses": len(diagnoses),
+        "total_doctors": len({*prescription_doctors, *[(doctor.get("name") or doctor.get("email") or "").strip() for doctor in care_team]} - {""}),
+        "latest_date": latest_date,
+        "latest_diagnosis": latest_diagnosis,
+        "latest_doctor": latest_doctor_name,
+        "diagnoses": diagnoses[:6],
+        "medicines": medicines[:8],
+        "prescription_doctors": [f"Dr. {name}" for name in prescription_doctors[:6]],
+        "care_team_doctors": care_team_doctors[:6],
+        "date_range": (
+            f"{issued_dates[-1]} to {issued_dates[0]}"
+            if len(issued_dates) > 1
+            else (issued_dates[0] if issued_dates else "")
+        ),
+    }
+
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
     load_custom_styles()
@@ -2394,6 +2723,36 @@ def patient_dashboard_page():
     st.markdown(f"<p class='patient-account-role'><strong>Account:</strong> {st.session_state.user_email} | <strong>Role:</strong> {st.session_state.user_role}</p>", unsafe_allow_html=True)
     
     st.markdown("---")
+
+    cancelled_appointments = get_cancelled_appointments_for_patient(st.session_state.get("user_email", ""))
+    if cancelled_appointments:
+        latest_cancelled = cancelled_appointments[0]
+        latest_cancelled_date = latest_cancelled.get("date", "")
+        latest_cancelled_time = latest_cancelled.get("time", "")
+        latest_doctor_name = escape(latest_cancelled.get("doctor_name") or "Unknown")
+        try:
+            latest_cancelled_date = datetime.strptime(latest_cancelled_date, "%Y-%m-%d").strftime("%b %d, %Y")
+        except (ValueError, TypeError):
+            latest_cancelled_date = latest_cancelled.get("date", "")
+
+        try:
+            latest_cancelled_time = datetime.strptime(latest_cancelled_time, "%H:%M").strftime("%I:%M %p")
+        except (ValueError, TypeError):
+            latest_cancelled_time = latest_cancelled.get("time", "")
+
+        extra_notice = ""
+        if len(cancelled_appointments) > 1:
+            extra_notice = f" You also have {len(cancelled_appointments) - 1} other cancelled appointment(s) in your history."
+
+        st.markdown(
+            f"""
+            <div style="background:#fff1f2; border:1px solid #fecdd3; border-left:4px solid #dc2626; color:#7f1d1d;
+                        border-radius:10px; padding:0.7rem 0.85rem; margin:0.35rem 0 1rem 0; font-size:0.9rem; font-weight:600;">
+                Appointment cancelled: Your appointment with Dr. {latest_doctor_name} on {latest_cancelled_date} at {latest_cancelled_time} was cancelled.{extra_notice}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     
     # Get prescriptions for calculations
     patient_prescriptions = get_prescriptions_for_patient(st.session_state.get("user_email", ""))
@@ -2493,10 +2852,249 @@ def patient_dashboard_page():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
+    patient_care_team = get_care_team_for_patient(st.session_state.get("user_email", ""))
+    treatment_summary = _build_patient_treatment_summary(patient_prescriptions, patient_care_team)
+
     # Patient Specific Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["My Medications", "Reminders", "Care Team", "Assistant Chat"])
-    
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["Treatment Summary", "My Medications", "Reminders", "Care Team", "Assistant Chat"]
+    )
+
     with tab1:
+        st.subheader("Treatment Summary")
+
+        if not patient_prescriptions and not patient_care_team:
+            st.info("Your treatment summary will appear here once you receive prescriptions or add doctors to your care team.")
+        else:
+            st.markdown(
+                """
+                <style>
+                .treatment-summary-shell {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.9rem;
+                    width: 100%;
+                    margin-bottom: 1rem;
+                }
+                .treatment-summary-hero {
+                    background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+                    border: 1px solid #d7e6ff;
+                    border-radius: 18px;
+                    padding: 1.1rem 1.15rem;
+                    box-shadow: 0 12px 28px rgba(26, 35, 126, 0.12);
+                    box-sizing: border-box;
+                    overflow: hidden;
+                }
+                .treatment-summary-title {
+                    color: #17326b;
+                    font-size: 1.05rem;
+                    font-weight: 800;
+                    margin: 0 0 0.3rem 0;
+                }
+                .treatment-summary-kicker {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.35rem;
+                    background: #e8fff8;
+                    color: #0f766e;
+                    border: 1px solid #9fe3d2;
+                    border-radius: 999px;
+                    padding: 0.22rem 0.6rem;
+                    font-size: 0.72rem;
+                    font-weight: 800;
+                    letter-spacing: 0.06em;
+                    text-transform: uppercase;
+                    margin-bottom: 0.55rem;
+                }
+                .treatment-summary-copy {
+                    color: #405277;
+                    font-size: 0.92rem;
+                    margin: 0;
+                    line-height: 1.55;
+                    overflow-wrap: anywhere;
+                }
+                .treatment-summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    gap: 0.85rem;
+                    width: 100%;
+                }
+                .treatment-summary-stat {
+                    background: #ffffff;
+                    border: 1px solid #dbe7fb;
+                    border-radius: 16px;
+                    padding: 0.95rem 1rem;
+                    box-shadow: 0 10px 22px rgba(26, 35, 126, 0.08);
+                    box-sizing: border-box;
+                    min-width: 0;
+                }
+                .treatment-summary-stat-label {
+                    color: #4f6288;
+                    font-size: 0.78rem;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                    margin-bottom: 0.35rem;
+                }
+                .treatment-summary-stat-value {
+                    color: #17326b;
+                    font-size: 1.6rem;
+                    font-weight: 800;
+                    line-height: 1.1;
+                    margin: 0 0 0.25rem 0;
+                }
+                .treatment-summary-stat-note {
+                    color: #4d5f83;
+                    font-size: 0.86rem;
+                    margin: 0;
+                }
+                .treatment-summary-section {
+                    background: #f8fbff;
+                    border: 1px solid #d7e6ff;
+                    border-radius: 16px;
+                    padding: 1rem 1.05rem;
+                    box-shadow: 0 10px 24px rgba(26, 35, 126, 0.08);
+                    box-sizing: border-box;
+                    min-width: 0;
+                    overflow: hidden;
+                    margin-bottom: 0.9rem;
+                }
+                .treatment-summary-column {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.9rem;
+                    width: 100%;
+                }
+                .treatment-summary-lower {
+                    margin-top: 0.25rem;
+                }
+                .treatment-summary-section h4 {
+                    color: #17326b;
+                    margin: 0 0 0.6rem 0;
+                    font-size: 0.98rem;
+                    font-weight: 800;
+                }
+                .treatment-summary-chips {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.45rem;
+                }
+                .treatment-summary-chip {
+                    background: #ffffff;
+                    border: 1px solid #d7e6ff;
+                    color: #24437f;
+                    border-radius: 999px;
+                    padding: 0.35rem 0.7rem;
+                    font-size: 0.84rem;
+                    font-weight: 600;
+                }
+                .treatment-summary-list {
+                    margin: 0;
+                    padding-left: 1rem;
+                    color: #2f436d;
+                    overflow-wrap: anywhere;
+                }
+                .treatment-summary-list li {
+                    margin-bottom: 0.35rem;
+                }
+                @media (max-width: 900px) {
+                    .treatment-summary-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
+                @media (max-width: 1100px) {
+                    .treatment-summary-grid {
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                    }
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            latest_note = "No prescriptions on file yet."
+            if treatment_summary["latest_date"]:
+                latest_note = (
+                    f"Most recent update was {treatment_summary['latest_date']} for "
+                    f"{treatment_summary['latest_diagnosis']} with Dr. {treatment_summary['latest_doctor']}."
+                )
+
+            date_range_text = treatment_summary["date_range"] or "No prescription dates yet"
+            st.markdown(
+                f"""
+                <div class="treatment-summary-shell">
+                    <div class="treatment-summary-hero">
+                        <span class="treatment-summary-kicker">AI-Generated</span>
+                        <p class="treatment-summary-title">Your care at a glance</p>
+                        <p class="treatment-summary-copy">
+                            This view keeps your diagnosis history, medicines, and doctors in one place.
+                            {latest_note}
+                        </p>
+                    </div>
+                    <div class="treatment-summary-grid">
+                        <div class="treatment-summary-stat">
+                            <p class="treatment-summary-stat-label">Diagnoses</p>
+                            <p class="treatment-summary-stat-value">{treatment_summary["total_diagnoses"]}</p>
+                            <p class="treatment-summary-stat-note">Across {date_range_text}</p>
+                        </div>
+                        <div class="treatment-summary-stat">
+                            <p class="treatment-summary-stat-label">Prescriptions</p>
+                            <p class="treatment-summary-stat-value">{treatment_summary["total_prescriptions"]}</p>
+                            <p class="treatment-summary-stat-note">Medication plans on file</p>
+                        </div>
+                        <div class="treatment-summary-stat">
+                            <p class="treatment-summary-stat-label">Doctors</p>
+                            <p class="treatment-summary-stat-value">{treatment_summary["total_doctors"]}</p>
+                            <p class="treatment-summary-stat-note">Active care relationships</p>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("<div class='treatment-summary-lower'></div>", unsafe_allow_html=True)
+            overview_col1, overview_col2 = st.columns([1.1, 0.9], gap="large")
+            with overview_col1:
+                diagnoses_html = "".join(
+                    f"<span class='treatment-summary-chip'>{escape(item)}</span>"
+                    for item in (treatment_summary["diagnoses"] or ["No diagnoses recorded"])
+                )
+                meds_html = "".join(
+                    f"<span class='treatment-summary-chip'>{escape(item)}</span>"
+                    for item in (treatment_summary["medicines"] or ["No medicines recorded"])
+                )
+                st.markdown(
+                    f"""
+                    <div class="treatment-summary-column">
+                        <div class="treatment-summary-section">
+                            <h4>Diagnosis Snapshot</h4>
+                            <div class="treatment-summary-chips">{diagnoses_html}</div>
+                        </div>
+                        <div class="treatment-summary-section">
+                            <h4>Medicine Snapshot</h4>
+                            <div class="treatment-summary-chips">{meds_html}</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with overview_col2:
+                doctor_lines = treatment_summary["care_team_doctors"] or treatment_summary["prescription_doctors"] or ["No doctors linked yet"]
+                doctor_list_html = "".join(f"<li>{escape(item)}</li>" for item in doctor_lines)
+                st.markdown(
+                    f"""
+                    <div class="treatment-summary-column">
+                        <div class="treatment-summary-section">
+                            <h4>Doctors Involved In Your Care</h4>
+                            <ul class="treatment-summary-list">{doctor_list_html}</ul>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    with tab2:
         st.subheader("Active Prescriptions")
 
         if not patient_prescriptions:
@@ -2617,7 +3215,7 @@ def patient_dashboard_page():
                     unsafe_allow_html=True,
                 )
         
-    with tab2:
+    with tab3:
         st.subheader("Medication Schedule & Tracking")
         if not patient_prescriptions:
             st.info("No prescriptions found. Your medication schedule will appear here once you receive prescriptions.")
@@ -2719,11 +3317,11 @@ def patient_dashboard_page():
             if not has_medications:
                 st.info("No active medications to display in schedule.")
         
-    with tab3:
+    with tab4:
         st.subheader("Care Team")
         
         # Get care team from database (includes doctors from appointments and prescriptions)
-        care_team = get_care_team_for_patient(st.session_state.get("user_email", ""))
+        care_team = patient_care_team
         
         if not care_team:
             st.info("No doctors in your care team yet. Book an appointment or receive a prescription to add a doctor to your team!")
@@ -2758,7 +3356,7 @@ def patient_dashboard_page():
                 """
                 st.markdown(care_team_card, unsafe_allow_html=True)
 
-    with tab4:
+    with tab5:
         render_dashboard_assistant_tab("Patient", st.session_state.get("user_email", ""))
 
     # Floating chatbot launcher for patient dashboard
@@ -2979,9 +3577,14 @@ def profile_edit_page():
                 <div class="profile-field">
                     <div class="profile-field-label">Office Hours</div>
                     <div class="profile-field-value">{}</div>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Off Day</div>
+                    <div class="profile-field-value">{}</div>
                 </div>""".format(
                     display_value(user_profile.get('speciality')),
-                    display_value(user_profile.get('office_hours'))
+                    display_value(user_profile.get('office_hours')),
+                    display_value(user_profile.get('off_day'))
                 )
             
             contact_fields += """
@@ -3023,6 +3626,28 @@ def profile_edit_page():
                         height=137,
                     )
 
+                    new_office_hours = None
+                    new_off_day = None
+                    if user_profile.get("role") == "Doctor":
+                        st.markdown("#### Professional Details")
+                        office_hour_options = ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"]
+                        current_office_hours = user_profile.get("office_hours") or office_hour_options[0]
+                        office_hours_index = office_hour_options.index(current_office_hours) if current_office_hours in office_hour_options else 0
+                        new_office_hours = st.selectbox(
+                            "Office Hours",
+                            office_hour_options,
+                            index=office_hours_index,
+                        )
+
+                        off_day_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+                        current_off_day = user_profile.get("off_day") or off_day_options[0]
+                        off_day_index = off_day_options.index(current_off_day) if current_off_day in off_day_options else 0
+                        new_off_day = st.selectbox(
+                            "Off Day",
+                            off_day_options,
+                            index=off_day_index,
+                        )
+
                 submit = st.form_submit_button("💾 Save Changes", use_container_width=True, type="primary")
 
                 if submit:
@@ -3040,6 +3665,8 @@ def profile_edit_page():
                         name=new_name,
                         new_email=new_email if email_changed else None,
                         address=new_address,
+                        office_hours=new_office_hours if user_profile.get("role") == "Doctor" else None,
+                        off_day=new_off_day if user_profile.get("role") == "Doctor" else None,
                     )
 
                     if success:

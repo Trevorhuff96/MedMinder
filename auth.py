@@ -35,14 +35,15 @@ def _migrate_doctors_table(cursor):
             phone TEXT,
             address TEXT,
             speciality TEXT,
-            office_hours TEXT
+            office_hours TEXT,
+            off_day TEXT
         )
         """
     )
     cursor.execute(
         """
-        INSERT INTO doctors_new (email, dob, gender, phone, address, speciality, office_hours)
-        SELECT email, dob, gender, phone, address, speciality, office_hours
+        INSERT INTO doctors_new (email, dob, gender, phone, address, speciality, office_hours, off_day)
+        SELECT email, dob, gender, phone, address, speciality, office_hours, NULL
         FROM doctors
         """
     )
@@ -101,7 +102,8 @@ def init_db():
             phone TEXT,
             address TEXT,
             speciality TEXT,
-            office_hours TEXT
+            office_hours TEXT,
+            off_day TEXT
         )
     ''')
     
@@ -133,6 +135,8 @@ def init_db():
     # Migrate old schemas (email-as-primary-key) to new id-based schemas
     if not _column_exists(cursor, "doctors", "doctor_id"):
         _migrate_doctors_table(cursor)
+    if not _column_exists(cursor, "doctors", "off_day"):
+        cursor.execute("ALTER TABLE doctors ADD COLUMN off_day TEXT")
     if not _column_exists(cursor, "patients", "patient_id"):
         _migrate_patients_table(cursor)
 
@@ -337,10 +341,10 @@ def create_user(name, email, password, role, profile_data):
         # 2. Insert into the appropriate profile table
         if role == "Doctor":
             cursor.execute(
-                "INSERT INTO doctors (email, dob, gender, phone, address, speciality, office_hours) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (email, profile_data.get('dob'), profile_data.get('gender'), 
-                 profile_data.get('phone'), profile_data.get('address'), 
-                 profile_data.get('speciality'), profile_data.get('office_hours'))
+                "INSERT INTO doctors (email, dob, gender, phone, address, speciality, office_hours, off_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (email, profile_data.get('dob'), profile_data.get('gender'),
+                 profile_data.get('phone'), profile_data.get('address'),
+                 profile_data.get('speciality'), profile_data.get('office_hours'), profile_data.get('off_day'))
             )
         elif role == "Patient":
             cursor.execute(
@@ -537,7 +541,7 @@ def get_user_profile(email):
     # Get role-specific profile data
     if role == "Doctor":
         cursor.execute(
-            "SELECT dob, gender, phone, address, speciality, office_hours FROM doctors WHERE email = ?",
+            "SELECT dob, gender, phone, address, speciality, office_hours, off_day FROM doctors WHERE email = ?",
             (email,)
         )
         profile_result = cursor.fetchone()
@@ -551,7 +555,8 @@ def get_user_profile(email):
                 "phone": profile_result[2],
                 "address": profile_result[3],
                 "speciality": profile_result[4],
-                "office_hours": profile_result[5]
+                "office_hours": profile_result[5],
+                "off_day": profile_result[6],
             }
     elif role == "Patient":
         cursor.execute(
@@ -574,7 +579,7 @@ def get_user_profile(email):
     return None
 
 
-def update_user_profile(email, name=None, new_email=None, address=None):
+def update_user_profile(email, name=None, new_email=None, address=None, office_hours=None, off_day=None):
     """
     Update user profile information.
     
@@ -625,18 +630,30 @@ def update_user_profile(email, name=None, new_email=None, address=None):
         else:
             updated_email = email
         
-        # Update profile table with new address
-        if address is not None:
-            if role == "Doctor":
+        # Update profile table fields
+        if role == "Doctor":
+            doctor_updates = []
+            doctor_values = []
+            if address is not None:
+                doctor_updates.append("address = ?")
+                doctor_values.append(address)
+            if office_hours is not None:
+                doctor_updates.append("office_hours = ?")
+                doctor_values.append(office_hours)
+            if off_day is not None:
+                doctor_updates.append("off_day = ?")
+                doctor_values.append(off_day)
+            if doctor_updates:
+                doctor_values.append(email)
                 cursor.execute(
-                    "UPDATE doctors SET address = ? WHERE email = ?",
-                    (address, email)
+                    f"UPDATE doctors SET {', '.join(doctor_updates)} WHERE email = ?",
+                    tuple(doctor_values),
                 )
-            elif role == "Patient":
-                cursor.execute(
-                    "UPDATE patients SET address = ? WHERE email = ?",
-                    (address, email)
-                )
+        elif role == "Patient" and address is not None:
+            cursor.execute(
+                "UPDATE patients SET address = ? WHERE email = ?",
+                (address, email)
+            )
         
         # If email changed, update profile table reference too
         if new_email and new_email != email:
@@ -660,4 +677,3 @@ def update_user_profile(email, name=None, new_email=None, address=None):
         return False, f"Error updating profile: {str(e)}"
     finally:
         conn.close()
-

@@ -435,12 +435,14 @@ def load_custom_styles():
         }
 
         div[data-testid="stTabs"] {
-            max-width: 720px;
+            width: 100%;
+            max-width: 960px;
             margin: 0 auto;
             background: #ffffff;
             padding: 0.75rem 1rem 1rem 1rem;
             border-radius: 12px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
         }
 
         .auth-container div[data-testid="stForm"] {
@@ -459,24 +461,29 @@ def load_custom_styles():
             border-radius: 10px;
             padding: 0.35rem;
             display: flex;
-            justify-content: center;
+            justify-content: flex-start;
+            flex-wrap: wrap;
             gap: 0.5rem;
             width: 100%;
             margin: 0;
         }
 
         div[data-testid="stTabs"] button[role="tab"] {
-            flex: 1 1 0;
+            flex: 1 1 140px;
+            min-width: 0;
             color: #1a237e;
             background: #e8f0ff;
-            font-size: 1.15rem;
-            padding: 0.75rem 1.8rem;
+            font-size: 0.95rem;
+            line-height: 1.2;
+            padding: 0.7rem 0.9rem;
             border-radius: 10px;
             text-align: center;
             border: 2px solid #c7d8ff;
             text-decoration: none;
             box-shadow: none;
             outline: none;
+            white-space: normal;
+            word-break: break-word;
         }
 
         div[data-testid="stTabs"] button[role="tab"]:focus,
@@ -523,6 +530,19 @@ def load_custom_styles():
             padding: 0.75rem 0 0 0;
             margin: 0;
             max-width: 100%;
+        }
+
+        @media (max-width: 768px) {
+            div[data-testid="stTabs"] {
+                max-width: 100%;
+                padding: 0.65rem 0.75rem 0.9rem 0.75rem;
+            }
+
+            div[data-testid="stTabs"] button[role="tab"] {
+                flex-basis: calc(50% - 0.25rem);
+                font-size: 0.88rem;
+                padding: 0.62rem 0.7rem;
+            }
         }
 
         .auth-back .stButton>button {
