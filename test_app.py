@@ -8,7 +8,97 @@ import auth
 import appointments
 import pages
 import prescription
+import ui_components
 from pages import DOB_MAX_DATE, validate_signup_fields
+
+
+class SessionStateStub(dict):
+    def __getattr__(self, item):
+        try:
+            return self[item]
+        except KeyError as exc:
+            raise AttributeError(item) from exc
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+
+class DummyContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class StreamlitPageStub:
+    def __init__(self, session_state=None, button_clicks=None, input_values=None, select_values=None, form_submit=False):
+        self.session_state = session_state or SessionStateStub()
+        self.button_clicks = button_clicks or {}
+        self.input_values = input_values or {}
+        self.select_values = select_values or {}
+        self.form_submit = form_submit
+        self.query_params = {}
+        self.markdowns = []
+        self.infos = []
+        self.errors = []
+        self.successes = []
+        self.subheaders = []
+        self.rerun_called = False
+
+    def markdown(self, text, **kwargs):
+        self.markdowns.append(text)
+
+    def info(self, text, **kwargs):
+        self.infos.append(text)
+
+    def error(self, text, **kwargs):
+        self.errors.append(text)
+
+    def success(self, text, **kwargs):
+        self.successes.append(text)
+
+    def subheader(self, text, **kwargs):
+        self.subheaders.append(text)
+
+    def columns(self, spec, **kwargs):
+        count = spec if isinstance(spec, int) else len(spec)
+        return [DummyContext() for _ in range(count)]
+
+    def tabs(self, labels):
+        return [DummyContext() for _ in labels]
+
+    def container(self, **kwargs):
+        return DummyContext()
+
+    def form(self, *args, **kwargs):
+        return DummyContext()
+
+    def button(self, label, key=None, **kwargs):
+        return self.button_clicks.get(key or label, False)
+
+    def selectbox(self, label, options, index=0, key=None, **kwargs):
+        lookup_key = key or label
+        if lookup_key in self.select_values:
+            return self.select_values[lookup_key]
+        if options:
+            return options[index if index is not None else 0]
+        return None
+
+    def text_input(self, label, value="", key=None, **kwargs):
+        return self.input_values.get(key or label, value)
+
+    def text_area(self, label, value="", key=None, **kwargs):
+        return self.input_values.get(key or label, value)
+
+    def form_submit_button(self, label, **kwargs):
+        return self.form_submit
+
+    def checkbox(self, label, value=False, key=None, **kwargs):
+        return self.input_values.get(key or label, value)
+
+    def rerun(self):
+        self.rerun_called = True
 
 
 @pytest.fixture
@@ -134,6 +224,227 @@ def test_update_doctor_profile_can_change_office_hours_and_off_day(isolated_auth
     assert profile["off_day"] == "Monday"
 
 
+def test_get_secret_value_returns_default_when_no_secrets_file(monkeypatch):
+    monkeypatch.setattr(ui_components.Path, "home", lambda: ui_components.Path("/tmp/nonexistent-home"))
+    monkeypatch.setattr(ui_components.Path, "cwd", lambda: ui_components.Path("/tmp/nonexistent-cwd"))
+
+    value = ui_components._get_secret_value("OLLAMA_MODEL", default="fallback-model")
+
+    assert value == "fallback-model"
+
+
+def test_get_secret_value_reads_streamlit_secret_when_file_exists(monkeypatch):
+    original_exists = ui_components.Path.exists
+
+    def fake_exists(path_obj):
+        if str(path_obj).endswith("secrets.toml"):
+            return True
+        return original_exists(path_obj)
+
+    monkeypatch.setattr(ui_components.Path, "exists", fake_exists)
+    monkeypatch.setattr(ui_components.st, "secrets", {"OLLAMA_MODEL": "llama-test"})
+
+    value = ui_components._get_secret_value("OLLAMA_MODEL", default="fallback-model")
+
+    assert value == "llama-test"
+
+
+def test_appointments_page_doctor_shows_empty_states(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub({"user_role": "Doctor", "user_email": "doctor@example.com", "menu_open": False})
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_appointments_for_doctor", lambda _email: [])
+    monkeypatch.setattr(pages, "get_past_appointments_for_doctor", lambda _email, _days=None: [])
+
+    pages.appointments_page()
+
+    assert "No upcoming patient appointments." in st_stub.infos
+    assert "No past appointments found in the all past filter." in st_stub.infos
+
+
+def test_appointments_page_patient_stops_when_no_doctors(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_role": "Patient", "user_email": "patient@example.com", "user_name": "Pat", "menu_open": False}
+        )
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email, _days=None: [])
+    monkeypatch.setattr(pages, "get_all_doctors", lambda: [])
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+
+    pages.appointments_page()
+
+    assert "You have no upcoming appointments." in st_stub.infos
+    assert "No past appointments found in the all past filter." in st_stub.infos
+    assert "No doctors are available for booking yet." in st_stub.infos
+
+
+def test_doctor_dashboard_page_shows_empty_sections(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_email": "doctor@example.com", "user_name": "Taylor", "user_role": "Doctor", "menu_open": False}
+        )
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_patient_count_for_doctor", lambda _email: 0)
+    monkeypatch.setattr(pages, "get_appointments_for_doctor", lambda _email: [])
+    monkeypatch.setattr(pages, "get_patients_for_doctor", lambda _email: [])
+    monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
+
+    pages.doctor_dashboard_page()
+
+    assert "No patients found. Patients will appear here once you create a prescription for them." in st_stub.infos
+    assert "No appointments today." in st_stub.infos
+    assert "No patients linked to you yet." in st_stub.infos
+
+
+def test_patient_dashboard_page_shows_cancel_banner_and_empty_summary(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_email": "patient@example.com", "user_name": "Jamie", "user_role": "Patient", "menu_open": False}
+        )
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(
+        pages,
+        "get_cancelled_appointments_for_patient",
+        lambda _email: [{"doctor_name": "Alex Carter", "date": "2026-03-10", "time": "09:30"}],
+    )
+    monkeypatch.setattr(pages, "get_prescriptions_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_care_team_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+
+    pages.patient_dashboard_page()
+
+    assert any("Appointment cancelled:" in item for item in st_stub.markdowns)
+    assert "Your treatment summary will appear here once you receive prescriptions or add doctors to your care team." in st_stub.infos
+    assert "No prescriptions found yet." in st_stub.infos
+    assert "No prescriptions found. Your medication schedule will appear here once you receive prescriptions." in st_stub.infos
+    assert "No doctors in your care team yet. Book an appointment or receive a prescription to add a doctor to your team!" in st_stub.infos
+
+
+def test_profile_edit_page_doctor_updates_professional_fields(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {
+                "user_email": "doctor@example.com",
+                "user_role": "Doctor",
+                "user_name": "Taylor",
+                "profile_edit_mode": True,
+                "menu_open": False,
+            }
+        ),
+        input_values={
+            "Full Name": "Dr. Taylor Updated",
+            "Email": "doctor@example.com",
+            "Address": "101 Clinic Ave",
+        },
+        select_values={"Office Hours": "8:00 AM to 5:00 PM", "Off Day": "Monday"},
+        form_submit=True,
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        pages,
+        "get_user_profile",
+        lambda _email: {
+            "name": "Dr. Taylor",
+            "email": "doctor@example.com",
+            "role": "Doctor",
+            "dob": "1980-01-01",
+            "gender": "Other",
+            "phone": "555",
+            "address": "99 Clinic Ave",
+            "speciality": "Dentist",
+            "office_hours": "9:00 AM to 6:00 PM",
+            "off_day": "Friday",
+        },
+    )
+    update_calls = {}
+
+    def fake_update(email, **kwargs):
+        update_calls["email"] = email
+        update_calls["kwargs"] = kwargs
+        return True, "Profile updated successfully!"
+
+    monkeypatch.setattr(pages, "update_user_profile", fake_update)
+
+    pages.profile_edit_page()
+
+    assert update_calls["email"] == "doctor@example.com"
+    assert update_calls["kwargs"]["address"] == "101 Clinic Ave"
+    assert update_calls["kwargs"]["office_hours"] == "8:00 AM to 5:00 PM"
+    assert update_calls["kwargs"]["off_day"] == "Monday"
+    assert st_stub.session_state["profile_edit_mode"] is False
+    assert st_stub.session_state["user_name"] == "Dr. Taylor Updated"
+    assert st_stub.rerun_called is True
+
+
+def test_render_floating_chatbot_builds_component_html(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(ui_components, "get_chatbot_component_css", lambda: ".mm-chatbot-wrap { color: red; }")
+    monkeypatch.setattr(ui_components, "_get_secret_value", lambda key, default="": default)
+    monkeypatch.setattr(
+        ui_components,
+        "_build_prescription_summary",
+        lambda _email: "Here is your latest prescription summary:<br><strong>Amoxicillin</strong>",
+    )
+    monkeypatch.setattr(ui_components, "get_specialities", lambda: ["Dentist", "Neurologist"])
+    monkeypatch.setattr(
+        ui_components,
+        "get_doctors_by_speciality",
+        lambda speciality: (
+            [{"name": "Taylor Nguyen", "email": "taylor@example.com", "speciality": speciality}]
+            if speciality == "Dentist"
+            else []
+        ),
+    )
+
+    def fake_html(html, height=None, scrolling=None):
+        captured["html"] = html
+        captured["height"] = height
+        captured["scrolling"] = scrolling
+
+    monkeypatch.setattr(ui_components.components, "html", fake_html)
+
+    ui_components.render_floating_chatbot(
+        patient_name="Jamie",
+        patient_email="jamie@example.com",
+        patient_role="Patient",
+    )
+
+    html = captured["html"]
+    assert "Hi Jamie" in html
+    assert "Here is your latest prescription summary" in html
+    assert "Taylor Nguyen" in html
+    assert "taylor@example.com" in html
+    assert "jamie@example.com" in html
+    assert "Dentist" in html
+    assert captured["height"] == 520
+    assert captured["scrolling"] is False
+
+
 def test_create_user_rejects_invalid_email(isolated_auth_db):
     success, message = auth.create_user(
         "Bad Email",
@@ -257,6 +568,88 @@ def test_validate_signup_fields_rejects_future_dob_for_doctor():
     assert errors["dob"] == "Date of Birth must be between 100 years ago and today."
 
 
+def test_assistant_state_key_sanitizes_role_and_email():
+    key = pages._assistant_state_key("Doctor", "doc.test@example.com")
+
+    assert key == "dashboard_assistant_state_doctor_doc_test_at_example_com"
+
+
+def test_compact_assistant_context_trims_messages_and_builds_summary():
+    state = {
+        "messages": [
+            {"role": "user", "content": f"User message {idx} " + ("x" * 140)}
+            if idx % 2 == 0
+            else {"role": "assistant", "content": f"Assistant message {idx}"}
+            for idx in range(18)
+        ],
+        "summary": "Earlier summary",
+    }
+
+    pages._compact_assistant_context(state, max_messages=10, max_summary_chars=500)
+
+    assert len(state["messages"]) == 10
+    assert len(state["summary"]) <= 500
+    assert "User:" in state["summary"]
+    assert "Assistant:" in state["summary"]
+    assert "..." in state["summary"]
+
+
+def test_infer_speciality_from_text_prefers_direct_match():
+    result = pages._infer_speciality_from_text(
+        "I think I need a Neurologist because of recurring dizziness.",
+        ["Cardiologist", "Neurologist", "Dentist"],
+    )
+
+    assert result == "Neurologist"
+
+
+def test_infer_speciality_from_text_falls_back_to_general_practitioner():
+    result = pages._infer_speciality_from_text(
+        "I feel tired and have a cough.",
+        ["Dentist", "General Practitioner"],
+    )
+
+    assert result == "General Practitioner"
+
+
+def test_build_prescription_summary_returns_empty_message(monkeypatch):
+    monkeypatch.setattr(ui_components, "get_prescriptions_for_patient", lambda _email: [])
+
+    summary = ui_components._build_prescription_summary("patient@example.com")
+
+    assert summary == "I could not find any prescriptions for you yet."
+
+
+def test_build_prescription_summary_formats_latest_medicines(monkeypatch):
+    monkeypatch.setattr(
+        ui_components,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "medicines": [
+                    {"name": "Amoxicillin", "dosage": "500 mg", "frequency": "Twice daily"},
+                    {"name": "Cetirizine", "dosage": "10 mg", "frequency": "Once daily"},
+                ]
+            }
+        ],
+    )
+
+    summary = ui_components._build_prescription_summary("patient@example.com")
+
+    assert "Here is your latest prescription summary:" in summary
+    assert "<strong>Amoxicillin</strong>: Dosage 500 mg, Frequency Twice daily" in summary
+    assert "<strong>Cetirizine</strong>: Dosage 10 mg, Frequency Once daily" in summary
+
+
+def test_build_symptom_speciality_map_contains_expected_keywords():
+    symptom_map = ui_components._build_symptom_speciality_map()
+
+    assert "Cardiologist" in symptom_map
+    assert "chest pain" in symptom_map["Cardiologist"]
+    assert "Dentist" in symptom_map
+    assert "toothache" in symptom_map["Dentist"]
+
+
 REQUIRED_DOCS = [
     "Design Decisions.docx",
     "Prompts.docx",
@@ -310,6 +703,54 @@ def test_dashboard_assistant_returns_past_patient_appointments(monkeypatch):
     assert "2026-01-10 at 09:00" in reply
     assert "Dr. Alex Carter" in reply
     assert recommended == []
+
+
+def test_build_patient_appointment_summary_combines_upcoming_and_past(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_appointments_for_patient",
+        lambda _email: [
+            {"date": "2026-04-01", "time": "09:00", "doctor_name": "Alex Carter", "speciality": "Dentist"}
+        ],
+    )
+    monkeypatch.setattr(
+        pages,
+        "get_past_appointments_for_patient",
+        lambda _email: [
+            {"date": "2026-03-01", "time": "10:00", "doctor_name": "Taylor Nguyen", "speciality": "Neurologist"}
+        ],
+    )
+
+    reply = pages._build_patient_appointment_summary("patient@example.com")
+
+    assert "You have 1 upcoming appointment(s)." in reply
+    assert "2026-04-01 at 09:00 with Dr. Alex Carter (Dentist)" in reply
+    assert "You also have 1 past appointment(s) in your history." in reply
+
+
+def test_build_doctor_appointment_summary_upcoming_includes_today_count(monkeypatch):
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    monkeypatch.setattr(
+        pages,
+        "get_appointments_for_doctor",
+        lambda _email: [
+            {"date": today_str, "time": "09:00", "patient_name": "Jamie Patient"},
+            {"date": "2026-12-01", "time": "14:00", "patient_name": "Robin Patient"},
+        ],
+    )
+
+    reply = pages._build_doctor_appointment_summary("doctor@example.com", focus="upcoming")
+
+    assert "You have 2 upcoming appointment(s)." in reply
+    assert "Today's appointments: 1." in reply
+    assert f"- {today_str} at 09:00 with Jamie Patient" in reply
+
+
+def test_get_appointment_query_focus_detects_past_and_upcoming():
+    assert pages._get_appointment_query_focus("Show my past appointments") == "past"
+    assert pages._get_appointment_query_focus("Do I have any future appointments?") == "upcoming"
+    assert pages._get_appointment_query_focus("Tell me about my schedule") == "all"
+    assert pages._get_appointment_query_focus("hello there") == "none"
 
 
 def test_dashboard_assistant_schedule_appointment_uses_booking_intent():
@@ -389,6 +830,76 @@ def test_dashboard_assistant_summarizes_multiple_prescriptions_for_patient(monke
     assert recommended == []
 
 
+def test_find_doctor_patient_match_uses_unique_token_match(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_patients_for_doctor",
+        lambda _email: [
+            {"name": "Jamie Carter", "email": "jamie@example.com"},
+            {"name": "Robin Mills", "email": "robin@example.com"},
+        ],
+    )
+
+    match = pages._find_doctor_patient_match("doctor@example.com", "Can you review Robin's prescription?")
+
+    assert match == {"name": "Robin Mills", "email": "robin@example.com"}
+
+
+def test_find_doctor_patient_match_returns_none_for_ambiguous_tokens(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_patients_for_doctor",
+        lambda _email: [
+            {"name": "Jamie Carter", "email": "jamie@example.com"},
+            {"name": "Jamie Morgan", "email": "jamie2@example.com"},
+        ],
+    )
+
+    match = pages._find_doctor_patient_match("doctor@example.com", "Show Jamie's prescriptions")
+
+    assert match is None
+
+
+def test_build_doctor_patient_prescription_summary_for_single_prescription():
+    summary = pages._build_doctor_patient_prescription_summary(
+        "Jamie Patient",
+        [
+            {
+                "diagnosis": "Migraine",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan"}, {"name": "Ibuprofen"}],
+            }
+        ],
+    )
+
+    assert "I found 1 prescription for Jamie Patient." in summary
+    assert "2026-03-10: Migraine" in summary
+    assert "Medicines: Sumatriptan, Ibuprofen" in summary
+    assert "Follow-up: 14 day(s)" in summary
+
+
+def test_get_prescription_followup_focus_detects_route_and_follow_up():
+    assert pages._get_prescription_followup_focus("What is the route for this medicine?") == "route"
+    assert pages._get_prescription_followup_focus("When is my follow up?") == "follow_up"
+    assert pages._get_prescription_followup_focus("tell me something else") == "none"
+
+
+def test_build_prescription_followup_response_handles_missing_context():
+    reply = pages._build_prescription_followup_response([], "frequency")
+
+    assert "could not find any prescription context yet" in reply.lower()
+
+
+def test_build_prescription_followup_response_returns_follow_up_timeline():
+    reply = pages._build_prescription_followup_response(
+        [{"follow_up_days": 21, "medicines": []}],
+        "follow_up",
+    )
+
+    assert reply == "Your follow-up timeline is 21 day(s) based on the latest prescription."
+
+
 def test_build_patient_treatment_summary_collects_patient_overview():
     prescriptions = [
         {
@@ -426,6 +937,52 @@ def test_build_patient_treatment_summary_collects_patient_overview():
         "Dr. Alex Carter • General Practitioner",
     ]
     assert summary["date_range"] == "2026-02-01 to 2026-03-10"
+
+
+def test_build_medication_schedule_supports_every_x_hours_pattern():
+    schedule = pages.build_medication_schedule(
+        [
+            {
+                "doctor_name": "Taylor Nguyen",
+                "medicines": [
+                    {
+                        "name": "Antibiotic",
+                        "dosage": "250 mg",
+                        "frequency": "Every 6 hours",
+                        "directions": "Take with water",
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert "Antibiotic" == schedule["8 AM"][0]["name"]
+    assert "Antibiotic" == schedule["2 PM"][0]["name"]
+    assert "Antibiotic" == schedule["8 PM"][0]["name"]
+
+
+def test_calculate_medication_adherence_uses_taken_doses(monkeypatch):
+    monkeypatch.setattr(
+        pages.st,
+        "session_state",
+        SessionStateStub({"medication_doses_taken": {"dose_1": True, "dose_2": False}}),
+    )
+    prescriptions = [
+        {
+            "doctor_name": "Taylor Nguyen",
+            "medicines": [
+                {"name": "A", "dosage": "5 mg", "frequency": "Once daily", "directions": ""},
+                {"name": "B", "dosage": "10 mg", "frequency": "Once daily", "directions": ""},
+            ],
+        }
+    ]
+
+    adherence = pages.calculate_medication_adherence(prescriptions)
+
+    assert adherence["taken"] == 1
+    assert adherence["total"] == 2
+    assert adherence["adherence_percent"] == 50
+    assert adherence["trend"] == "-2%"
 
 
 def test_dashboard_assistant_prescription_request_for_doctor():
