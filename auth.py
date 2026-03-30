@@ -303,7 +303,7 @@ def hash_password(password):
     Returns:
         str: Hashed password
     """
-    return hashlib.md5(password.encode()).hexdigest()
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(password, hashed_password):
     """
@@ -316,6 +316,13 @@ def verify_password(password, hashed_password):
     Returns:
         bool: True if password matches, False otherwise
     """
+    if not hashed_password:
+        return False
+
+    # Support legacy MD5 hashes while defaulting to SHA-256 for new users.
+    if len(hashed_password) == 32:
+        return hashlib.md5(password.encode()).hexdigest() == hashed_password
+
     return hash_password(password) == hashed_password
 
 def create_user(name, email, password, role, profile_data):
@@ -370,15 +377,27 @@ def authenticate_user(email, password):
     
     cursor.execute("SELECT name, password, role FROM users WHERE email = ?", (email,))
     result = cursor.fetchone()
-    conn.close()
     
     if result is None:
+        conn.close()
         return False, "No account found with this email!"
         
     stored_name, stored_hashed_password, stored_role = result
     
     if not verify_password(password, stored_hashed_password):
+        conn.close()
         return False, "Incorrect password!"
+
+    # Migrate legacy hashes to SHA-256 after a successful login.
+    new_hash = hash_password(password)
+    if stored_hashed_password != new_hash:
+        cursor.execute(
+            "UPDATE users SET password = ? WHERE email = ?",
+            (new_hash, email),
+        )
+        conn.commit()
+
+    conn.close()
         
     # Returning a dictionary so the frontend knows exactly who logged in and what UI to show
     user_info = {
