@@ -3,7 +3,6 @@ name: CI and Folder Notifications
 on:
   push:
     branches: ["main"]
-    # Triggers if Python files change OR if files in these specific folders change
     paths:
       - 'docs/**'
       - '*.py'
@@ -12,6 +11,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+
   # Job 1: Run your Python Tests
   test:
     runs-on: ubuntu-latest
@@ -35,9 +50,8 @@ jobs:
   # Job 2: Create the notification Issue
   notify:
     runs-on: ubuntu-latest
-    # Optional: uncomment 'needs: test' if you only want an issue if tests pass
-    # needs: test 
-    if: github.event_name == 'push'
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.docs == 'true'
     permissions:
       issues: write
     env:
