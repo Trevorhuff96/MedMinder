@@ -2888,6 +2888,49 @@ def _build_patient_treatment_summary(prescriptions: list[dict], care_team: list[
         ),
     }
 
+
+def _build_patient_doctor_notes(prescriptions: list[dict], appointments: list[dict], past_appointments: list[dict]) -> list[dict]:
+    """Build a recent doctor-note feed for the patient dashboard."""
+    notes = []
+
+    for rx in prescriptions:
+        note_text = (rx.get("general_notes") or "").strip()
+        if not note_text:
+            continue
+        doctor_name = (rx.get("doctor_name") or rx.get("doctor_email") or "Unknown doctor").strip()
+        diagnosis = (rx.get("diagnosis") or "Not specified").strip() or "Not specified"
+        created_at = (rx.get("created_at") or "").strip()
+        notes.append(
+            {
+                "sort_key": created_at,
+                "date": created_at[:10] if created_at else "",
+                "doctor_name": doctor_name,
+                "source": f"Prescription note for {diagnosis}",
+                "text": note_text,
+            }
+        )
+
+    for appt in [*appointments, *past_appointments]:
+        note_text = (appt.get("notes") or "").strip()
+        if not note_text:
+            continue
+        doctor_name = (appt.get("doctor_name") or appt.get("doctor_email") or "Unknown doctor").strip()
+        appt_date = (appt.get("date") or "").strip()
+        appt_time = (appt.get("time") or "").strip()
+        notes.append(
+            {
+                "sort_key": f"{appt_date} {appt_time}".strip(),
+                "date": appt_date,
+                "doctor_name": doctor_name,
+                "source": "Appointment note",
+                "text": note_text,
+            }
+        )
+
+    notes.sort(key=lambda item: item.get("sort_key", ""), reverse=True)
+    return notes[:6]
+
+
 def patient_dashboard_page():
     """Display the dashboard specifically for Patients"""
     load_custom_styles()
@@ -2947,6 +2990,12 @@ def patient_dashboard_page():
     
     # Get appointments for next appointment metric
     patient_appointments = get_appointments_for_patient(st.session_state.get("user_email", ""))
+    patient_past_appointments = get_past_appointments_for_patient(st.session_state.get("user_email", ""))
+    patient_doctor_notes = _build_patient_doctor_notes(
+        patient_prescriptions,
+        patient_appointments,
+        patient_past_appointments,
+    )
     
     # Calculate next dose dynamically
     next_dose_info = get_next_medication_dose(patient_prescriptions)
@@ -3185,6 +3234,32 @@ def patient_dashboard_page():
                 .treatment-summary-list li {
                     margin-bottom: 0.35rem;
                 }
+                .treatment-summary-note-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.7rem;
+                }
+                .treatment-summary-note-card {
+                    background: #ffffff;
+                    border: 1px solid #d7e6ff;
+                    border-radius: 14px;
+                    padding: 0.85rem 0.9rem;
+                }
+                .treatment-summary-note-meta {
+                    color: #4f6288;
+                    font-size: 0.76rem;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    margin-bottom: 0.35rem;
+                }
+                .treatment-summary-note-text {
+                    color: #2f436d;
+                    font-size: 0.9rem;
+                    line-height: 1.55;
+                    margin: 0;
+                    overflow-wrap: anywhere;
+                }
                 @media (max-width: 900px) {
                     .treatment-summary-grid {
                         grid-template-columns: 1fr;
@@ -3270,12 +3345,29 @@ def patient_dashboard_page():
             with overview_col2:
                 doctor_lines = treatment_summary["care_team_doctors"] or treatment_summary["prescription_doctors"] or ["No doctors linked yet"]
                 doctor_list_html = "".join(f"<li>{escape(item)}</li>" for item in doctor_lines)
+                doctor_notes_html = "".join(
+                    f"""
+                    <div class="treatment-summary-note-card">
+                        <div class="treatment-summary-note-meta">
+                            {escape(note.get("source", "Doctor note"))}
+                            {" • " + escape(note.get("date", "")) if note.get("date") else ""}
+                            {" • Dr. " + escape(note.get("doctor_name", "Unknown")) if note.get("doctor_name") else ""}
+                        </div>
+                        <p class="treatment-summary-note-text">{escape(note.get("text", ""))}</p>
+                    </div>
+                    """
+                    for note in patient_doctor_notes
+                ) or "<p class='treatment-summary-note-text'>No doctor notes recorded yet.</p>"
                 st.markdown(
                     f"""
                     <div class="treatment-summary-column">
                         <div class="treatment-summary-section">
                             <h4>Doctors Involved In Your Care</h4>
                             <ul class="treatment-summary-list">{doctor_list_html}</ul>
+                        </div>
+                        <div class="treatment-summary-section">
+                            <h4>Doctor Notes</h4>
+                            <div class="treatment-summary-note-list">{doctor_notes_html}</div>
                         </div>
                     </div>
                     """,
@@ -3395,6 +3487,7 @@ def patient_dashboard_page():
                         <p class="patient-rx-doctor"><strong>Doctor:</strong> {doctor_name}</p>
                         <p class="patient-rx-diagnosis"><strong>Diagnosis:</strong> {diagnosis}</p>
                         <p class="patient-rx-followup"><strong>Follow-up:</strong> {follow_up} days</p>
+                        {f"<p class='patient-rx-followup'><strong>Doctor Notes:</strong> {escape((rx.get('general_notes') or '').strip())}</p>" if (rx.get("general_notes") or "").strip() else ""}
                         <ul class="patient-med-list">
                             {''.join(med_lines)}
                         </ul>

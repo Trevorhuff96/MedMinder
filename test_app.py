@@ -327,6 +327,7 @@ def test_patient_dashboard_page_shows_cancel_banner_and_empty_summary(monkeypatc
     )
     monkeypatch.setattr(pages, "get_prescriptions_for_patient", lambda _email: [])
     monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email: [])
     monkeypatch.setattr(pages, "get_care_team_for_patient", lambda _email: [])
     monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
@@ -338,6 +339,59 @@ def test_patient_dashboard_page_shows_cancel_banner_and_empty_summary(monkeypatc
     assert "No prescriptions found yet." in st_stub.infos
     assert "No prescriptions found. Your medication schedule will appear here once you receive prescriptions." in st_stub.infos
     assert "No doctors in your care team yet. Book an appointment or receive a prescription to add a doctor to your team!" in st_stub.infos
+
+
+def test_patient_dashboard_page_shows_doctor_notes(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_email": "patient@example.com", "user_name": "Jamie", "user_role": "Patient", "menu_open": False}
+        )
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_cancelled_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "general_notes": "Hydrate and rest",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan", "dosage": "50 mg", "frequency": "Once daily", "days": 5, "directions": "After meals"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        pages,
+        "get_appointments_for_patient",
+        lambda _email: [
+            {
+                "date": "2026-03-12",
+                "time": "11:00",
+                "doctor_name": "Alex Carter",
+                "notes": "Please arrive 10 minutes early",
+            }
+        ],
+    )
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_care_team_for_patient",
+        lambda _email: [{"name": "Taylor Nguyen", "email": "taylor@example.com", "speciality": "Neurologist"}],
+    )
+    monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+
+    pages.patient_dashboard_page()
+
+    assert any("Doctor Notes" in item for item in st_stub.markdowns)
+    assert any("Hydrate and rest" in item for item in st_stub.markdowns)
+    assert any("Please arrive 10 minutes early" in item for item in st_stub.markdowns)
 
 
 def test_profile_edit_page_doctor_updates_professional_fields(monkeypatch):
@@ -1063,6 +1117,42 @@ def test_build_patient_treatment_summary_collects_patient_overview():
         "Dr. Alex Carter • General Practitioner",
     ]
     assert summary["date_range"] == "2026-02-01 to 2026-03-10"
+
+
+def test_build_patient_doctor_notes_combines_prescription_and_appointment_notes():
+    notes = pages._build_patient_doctor_notes(
+        [
+            {
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "general_notes": "Hydrate and rest",
+                "created_at": "2026-03-10T09:00:00",
+            }
+        ],
+        [
+            {
+                "date": "2026-03-12",
+                "time": "11:00",
+                "doctor_name": "Alex Carter",
+                "notes": "Please arrive 10 minutes early",
+            }
+        ],
+        [
+            {
+                "date": "2026-03-01",
+                "time": "08:30",
+                "doctor_name": "Robin Mills",
+                "notes": "Continue light exercise",
+            }
+        ],
+    )
+
+    assert len(notes) == 3
+    assert notes[0]["source"] == "Appointment note"
+    assert notes[0]["text"] == "Please arrive 10 minutes early"
+    assert notes[1]["source"] == "Prescription note for Migraine"
+    assert notes[1]["text"] == "Hydrate and rest"
+    assert notes[2]["doctor_name"] == "Robin Mills"
 
 
 def test_build_medication_schedule_supports_every_x_hours_pattern():
