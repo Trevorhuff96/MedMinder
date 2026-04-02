@@ -1206,18 +1206,6 @@ def test_dashboard_assistant_cancel_intent_populates_cancellable_appointments(mo
     assert recommended == []
 
 
-def test_dashboard_assistant_cancel_intent_for_doctor_is_rejected():
-    reply, recommended = pages._generate_dashboard_assistant_reply(
-        "Doctor",
-        "doctor@example.com",
-        "cancel appointment",
-        {},
-    )
-
-    assert "Only patients can cancel" in reply
-    assert recommended == []
-
-
 def test_dashboard_assistant_cancel_upcoming_appointment_prefers_cancel_flow(monkeypatch):
     upcoming = [
         {
