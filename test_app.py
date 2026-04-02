@@ -594,7 +594,6 @@ def test_validate_signup_fields_rejects_future_dob_for_patient():
         "Boston",
         "Massachusetts",
         "02110",
-        "United States",
         "555-111-2222",
         "jane@example.com",
         "secret123",
@@ -612,7 +611,6 @@ def test_validate_signup_fields_rejects_future_dob_for_doctor():
         "Boston",
         "Massachusetts",
         "02110",
-        "United States",
         "555-333-4444",
         "doctor@example.com",
         "secret123",
@@ -1420,7 +1418,6 @@ def test_dashboard_assistant_cancel_intent_populates_cancellable_appointments(mo
     assert "Select an appointment below" in reply
     assert state.get("pending_cancellable_appointments") == upcoming
     assert recommended == []
-
 
 def test_dashboard_assistant_cancel_intent_for_doctor_lists_upcoming_appointments(monkeypatch):
     upcoming = [

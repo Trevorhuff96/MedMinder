@@ -6,6 +6,7 @@ import json
 import os
 from datetime import date, datetime, timedelta
 from html import escape
+import re
 from pathlib import Path
 from urllib import error, request
 
@@ -54,50 +55,11 @@ US_STATES = [
     "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ]
 
-COUNTRIES = [
-    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola",
-    "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
-    "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus",
-    "Belgium", "Belize", "Benin", "Bhutan", "Bolivia",
-    "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria",
-    "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon",
-    "Canada", "Central African Republic", "Chad", "Chile", "China",
-    "Colombia", "Comoros", "Congo", "Costa Rica", "Cote d'Ivoire",
-    "Croatia", "Cuba", "Cyprus", "Czech Republic", "Democratic Republic of the Congo",
-    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador",
-    "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia",
-    "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon",
-    "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada",
-    "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras",
-    "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland",
-    "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya",
-    "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon",
-    "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
-    "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta",
-    "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia",
-    "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique",
-    "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand",
-    "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
-    "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay",
-    "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia",
-    "Rwanda", "Saint Kitts and Nevis", "Saint Lucia",
-    "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe",
-    "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore",
-    "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
-    "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname",
-    "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania",
-    "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia",
-    "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine",
-    "United Arab Emirates", "United Kingdom", "United States", "Uruguay",
-    "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen",
-    "Zambia", "Zimbabwe"
-]
-
 DOB_MAX_DATE = date.today()
 DOB_MIN_DATE = DOB_MAX_DATE - timedelta(days=365 * 100)
 
 def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_code, 
-                           country, phone, email, password, speciality="__SKIP__"):
+                           phone, email, password, speciality="__SKIP__"):
     """
     Validate signup form fields for both Doctor and Patient roles.
     
@@ -110,36 +72,68 @@ def validate_signup_fields(first_name, last_name, dob, line1, city, state, zip_c
     """
     errors = {}
     
+    first_name = (first_name or "").strip()
+    last_name = (last_name or "").strip()
+    line1 = (line1 or "").strip()
+    city = (city or "").strip()
+    zip_code = (zip_code or "").strip()
+    phone = (phone or "").strip()
+    email = (email or "").strip()
+    password = password or ""
+
     # Common validations
     if not first_name:
         errors["first_name"] = "First Name is required."
+    elif not re.fullmatch(r"[A-Za-z][A-Za-z\s'\-]{0,49}", first_name):
+        errors["first_name"] = "First Name can only contain letters, spaces, apostrophes, and hyphens."
+
     if not last_name:
         errors["last_name"] = "Last Name is required."
+    elif not re.fullmatch(r"[A-Za-z][A-Za-z\s'\-]{0,49}", last_name):
+        errors["last_name"] = "Last Name can only contain letters, spaces, apostrophes, and hyphens."
+
     if dob is None:
         errors["dob"] = "Date of Birth is required."
     elif dob > DOB_MAX_DATE or dob < DOB_MIN_DATE:
         errors["dob"] = "Date of Birth must be between 100 years ago and today."
+
     if not line1:
         errors["line1"] = "Address Line 1 is required."
+
     if not city:
         errors["city"] = "City is required."
+    elif not re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]{0,59}", city):
+        errors["city"] = "City can only contain letters, spaces, periods, and hyphens."
+
     if state is None:
         errors["state"] = "State is required."
+
     if not zip_code:
         errors["zip_code"] = "Zip Code is required."
-    if country is None:
-        errors["country"] = "Country is required."
+    elif not re.fullmatch(r"\d{5}(?:-\d{4})?", zip_code):
+        errors["zip_code"] = "Zip Code must be in 5-digit format or ZIP+4 (e.g., 28223 or 28223-1234)."
+
     if not phone:
         errors["phone"] = "Phone is required."
+    else:
+        phone_digits = re.sub(r"\D", "", phone)
+        if len(phone_digits) < 10 or len(phone_digits) > 15:
+            errors["phone"] = "Phone must contain between 10 and 15 digits."
+
     if not email:
         errors["email"] = "Email is required."
+    elif not re.fullmatch(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", email):
+        errors["email"] = "Please enter a valid email address."
+
     if not password:
         errors["password"] = "Password is required."
     elif len(password) < 6:
         errors["password"] = "Password must be at least 6 characters."
+    elif not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        errors["password"] = "Password must include at least one letter and one number."
     
     # Doctor-specific validation (only validate if speciality was passed)
-    if speciality != "__SKIP__" and speciality is None:
+    if speciality != "__SKIP__" and not speciality:
         errors["speciality"] = "Speciality is required."
     
     return errors
@@ -248,12 +242,12 @@ def auth_page():
         if st.session_state.role == "Doctor":
             with st.form("doctor_onboarding_form"):
                 st.markdown("<h3 class='auth-section-title'>Doctor Onboarding</h3>", unsafe_allow_html=True)
-                first_name = st.text_input("First Name", placeholder="Enter your first name")
+                first_name = st.text_input("First Name *", placeholder="Enter your first name")
                 first_name_error = st.empty()
-                last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                last_name = st.text_input("Last Name *", placeholder="Enter your last name")
                 last_name_error = st.empty()
                 dob = st.date_input(
-                    "Date of Birth",
+                    "Date of Birth *",
                     min_value=DOB_MIN_DATE,
                     max_value=DOB_MAX_DATE,
                     format="DD/MM/YYYY",
@@ -263,24 +257,22 @@ def auth_page():
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Office Location</h4>", unsafe_allow_html=True)
-                line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
+                line1 = st.text_input("Address Line 1 *", placeholder="Enter address line 1")
                 line1_error = st.empty()
                 line2 = st.text_input("Address Line 2 (optional)", placeholder="Enter address line 2")
-                city = st.text_input("City", placeholder="Enter city")
+                city = st.text_input("City *", placeholder="Enter city")
                 city_error = st.empty()
-                state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
+                state = st.selectbox("State *", US_STATES, index=None, placeholder="Select your state")
                 state_error = st.empty()
-                zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                zip_code = st.text_input("Zip Code *", placeholder="Enter zip code")
                 zip_code_error = st.empty()
-                country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
-                country_error = st.empty()
 
                 st.markdown("<h4 class='auth-subtitle'>Professional Details</h4>", unsafe_allow_html=True)
-                phone = st.text_input("Phone", placeholder="Enter phone number")
+                phone = st.text_input("Phone *", placeholder="Enter phone number")
                 phone_error = st.empty()
                 speciality_options = get_specialities()
                 speciality = st.selectbox(
-                    "Speciality",
+                    "Speciality *",
                     speciality_options,
                     index=None,
                     placeholder="Select your specialty",
@@ -290,9 +282,9 @@ def auth_page():
                 office_hours = st.radio("Office Hours", ["8:00 AM to 5:00 PM", "9:00 AM to 6:00 PM"])
 
                 st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
-                email = st.text_input("Email", placeholder="Enter your email")
+                email = st.text_input("Email *", placeholder="Enter your email")
                 email_error = st.empty()
-                password = st.text_input("Password", type="password", placeholder="Enter your password")
+                password = st.text_input("Password *", type="password", placeholder="Enter your password")
                 password_error = st.empty()
                 submit = st.form_submit_button("Sign Up")
 
@@ -305,7 +297,6 @@ def auth_page():
                         "city": city_error,
                         "state": state_error,
                         "zip_code": zip_code_error,
-                        "country": country_error,
                         "phone": phone_error,
                         "speciality": speciality_error,
                         "email": email_error,
@@ -315,21 +306,21 @@ def auth_page():
                     # Validate all fields using helper function
                     errors = validate_signup_fields(
                         first_name, last_name, dob, line1, city, state, zip_code,
-                        country, phone, email, password, speciality=speciality
+                        phone, email, password, speciality=speciality
                     )
 
                     if errors:
                         if len(errors) == 1:
                             st.error(next(iter(errors.values())))
                         else:
-                            st.error("There are missing required fields.")
+                            st.error("Please fix the highlighted fields.")
                             for key, message in errors.items():
                                 slot = error_slots.get(key)
                                 if slot is not None:
                                     slot.error(message)
                         return
 
-                    address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
+                    address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, United States"
                     profile_data = {
                         "dob": str(dob), 
                         "gender": gender,
@@ -353,12 +344,12 @@ def auth_page():
         elif st.session_state.role == "Patient":
             with st.form("patient_onboarding_form"):
                 st.markdown("<h3 class='auth-section-title'>Patient Onboarding</h3>", unsafe_allow_html=True)
-                first_name = st.text_input("First Name", placeholder="Enter your first name")
+                first_name = st.text_input("First Name *", placeholder="Enter your first name")
                 first_name_error = st.empty()
-                last_name = st.text_input("Last Name", placeholder="Enter your last name")
+                last_name = st.text_input("Last Name *", placeholder="Enter your last name")
                 last_name_error = st.empty()
                 dob = st.date_input(
-                    "Date of Birth",
+                    "Date of Birth *",
                     min_value=DOB_MIN_DATE,
                     max_value=DOB_MAX_DATE,
                     format="DD/MM/YYYY",
@@ -368,24 +359,22 @@ def auth_page():
                 gender = st.radio("Gender", ["Male", "Female", "Other"])
 
                 st.markdown("<h4 class='auth-subtitle'>Address</h4>", unsafe_allow_html=True)
-                line1 = st.text_input("Address Line 1", placeholder="Enter address line 1")
+                line1 = st.text_input("Address Line 1 *", placeholder="Enter address line 1")
                 line1_error = st.empty()
                 line2 = st.text_input("Address Line 2 (optional)", placeholder="Enter address line 2")
-                city = st.text_input("City", placeholder="Enter city")
+                city = st.text_input("City *", placeholder="Enter city")
                 city_error = st.empty()
-                state = st.selectbox("State", US_STATES, index=None, placeholder="Select your state")
+                state = st.selectbox("State *", US_STATES, index=None, placeholder="Select your state")
                 state_error = st.empty()
-                zip_code = st.text_input("Zip Code", placeholder="Enter zip code")
+                zip_code = st.text_input("Zip Code *", placeholder="Enter zip code")
                 zip_code_error = st.empty()
-                country = st.selectbox("Country", COUNTRIES, index=None, placeholder="Select your country")
-                country_error = st.empty()
-                phone = st.text_input("Phone", placeholder="Enter phone number")
+                phone = st.text_input("Phone *", placeholder="Enter phone number")
                 phone_error = st.empty()
 
                 st.markdown("<h4 class='auth-subtitle'>Account Details</h4>", unsafe_allow_html=True)
-                email = st.text_input("Email", placeholder="Enter your email")
+                email = st.text_input("Email *", placeholder="Enter your email")
                 email_error = st.empty()
-                password = st.text_input("Password", type="password", placeholder="Enter your password")
+                password = st.text_input("Password *", type="password", placeholder="Enter your password")
                 password_error = st.empty()
                 submit = st.form_submit_button("Sign Up")
 
@@ -398,7 +387,6 @@ def auth_page():
                         "city": city_error,
                         "state": state_error,
                         "zip_code": zip_code_error,
-                        "country": country_error,
                         "phone": phone_error,
                         "email": email_error,
                         "password": password_error,
@@ -407,21 +395,21 @@ def auth_page():
                     # Validate all fields using helper function
                     errors = validate_signup_fields(
                         first_name, last_name, dob, line1, city, state, zip_code,
-                        country, phone, email, password
+                        phone, email, password
                     )
 
                     if errors:
                         if len(errors) == 1:
                             st.error(next(iter(errors.values())))
                         else:
-                            st.error("There are missing required fields.")
+                            st.error("Please fix the highlighted fields.")
                             for key, message in errors.items():
                                 slot = error_slots.get(key)
                                 if slot is not None:
                                     slot.error(message)
                         return
 
-                    address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, {country}"
+                    address_str = f"{line1}{', ' + line2 if line2 else ''}, {city}, {state} {zip_code}, United States"
                     profile_data = {
                         "dob": str(dob), 
                         "gender": gender,
@@ -1178,6 +1166,22 @@ def appointments_page():
 
     quick_slots.sort(key=lambda item: item["event_start"])
 
+    confirm_request_key = f"confirm_appointment_{user_email}_{viewed_doc.get('email', 'doctor')}"
+    confirm_checkbox_key = f"{confirm_request_key}_checked"
+
+    def request_appointment_confirmation(event_start, source_label=""):
+        try:
+            date_obj = datetime.fromisoformat(event_start.replace("Z", "+00:00"))
+            formatted_date = date_obj.strftime("%B %d, %Y at %I:%M %p")
+            st.session_state[confirm_request_key] = {
+                "event_start": event_start,
+                "formatted_date": formatted_date,
+                "source": source_label,
+            }
+            st.session_state[confirm_checkbox_key] = False
+        except ValueError:
+            st.error("Invalid appointment time format. Please try again.")
+
     def process_appointment_booking(event_start):
         # Create unique key for this appointment booking to prevent duplicates
         appt_key = f"{user_email}_{viewed_doc.get('email')}_{event_start}"
@@ -1220,6 +1224,42 @@ def appointments_page():
         except ValueError:
             st.error("Invalid appointment time format. Please try again.")
 
+    if hasattr(st, "dialog"):
+        @st.dialog("Confirm Appointment")
+        def show_appointment_confirmation_dialog():
+            confirm_request = st.session_state.get(confirm_request_key)
+            if not confirm_request:
+                return
+
+            source_label = confirm_request.get("source", "")
+            source_text = f" via {source_label}" if source_label else ""
+            st.write(
+                f"You selected **{confirm_request.get('formatted_date', 'this appointment time')}**{source_text}."
+            )
+            st.write("Please verify before booking.")
+
+            confirmed = st.checkbox(
+                "I verify this is the appointment time I want to book.",
+                key=confirm_checkbox_key,
+            )
+
+            confirm_col, cancel_col = st.columns(2)
+            with confirm_col:
+                if st.button("Confirm and Book", type="primary", use_container_width=True):
+                    if confirmed:
+                        event_start = confirm_request.get("event_start", "")
+                        st.session_state.pop(confirm_request_key, None)
+                        st.session_state.pop(confirm_checkbox_key, None)
+                        process_appointment_booking(event_start)
+                    else:
+                        st.warning("Please check the confirmation box before booking.")
+
+            with cancel_col:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.pop(confirm_request_key, None)
+                    st.session_state.pop(confirm_checkbox_key, None)
+                    st.rerun()
+
     st.markdown("<p class='appointment-step-title'>Step 2: Book Your Appointment</p>", unsafe_allow_html=True)
     
     if quick_slots:
@@ -1253,7 +1293,7 @@ def appointments_page():
             )
 
         if st.button("✅ Book Now", type="primary", key=f"quick_book_btn_{viewed_doc.get('email', 'doctor')}", use_container_width=True):
-            process_appointment_booking(selected_event_start)
+            request_appointment_confirmation(selected_event_start, "Quick Book")
         
         st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
         st.markdown("<p class='appointment-calendar-title'>📅 Calendar View</p>", unsafe_allow_html=True)
@@ -1278,7 +1318,13 @@ def appointments_page():
     if cal_result and cal_result.get("callback") == "eventClick":
         event_start = cal_result.get("eventClick", {}).get("event", {}).get("start", "")
         if event_start:
-            process_appointment_booking(event_start)
+            request_appointment_confirmation(event_start, "Calendar")
+
+    if st.session_state.get(confirm_request_key):
+        if hasattr(st, "dialog"):
+            show_appointment_confirmation_dialog()
+        else:
+            st.warning("Your Streamlit version does not support modal dialogs. Please update Streamlit to use popup confirmation.")
 
     # Floating chatbot launcher for patient appointments page.
     # Keep it hidden while the side menu is open so it does not block menu clicks.
