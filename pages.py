@@ -2,9 +2,13 @@
 Page components for the MedMinder app
 """
 
+import json
+import os
 from datetime import date, datetime, timedelta
 from html import escape
 import re
+from pathlib import Path
+from urllib import error, request
 
 import streamlit as st
 from streamlit_calendar import calendar
@@ -1388,6 +1392,146 @@ def _infer_speciality_from_text(user_text: str, specialities: list[str]) -> str:
     return specialities[0]
 
 
+def _get_streamlit_secret_value(key: str, default: str = "") -> str:
+    """Read a Streamlit secret only when a secrets.toml file exists."""
+    secrets_paths = [
+        Path.home() / ".streamlit" / "secrets.toml",
+        Path.cwd() / ".streamlit" / "secrets.toml",
+    ]
+
+    if not any(path.exists() for path in secrets_paths):
+        return default
+
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
+def _get_dashboard_assistant_llm_config() -> tuple[str, str]:
+    base_url = _get_streamlit_secret_value("OLLAMA_BASE_URL") or os.getenv("OLLAMA_BASE_URL", "")
+    model = _get_streamlit_secret_value("OLLAMA_MODEL") or os.getenv("OLLAMA_MODEL", "")
+    return (base_url or "").strip(), (model or "").strip()
+
+
+def _call_ollama_chat(messages: list[dict], timeout_seconds: int = 10) -> str:
+    base_url, model = _get_dashboard_assistant_llm_config()
+    if not base_url or not model:
+        return ""
+
+    payload = {
+        "model": model,
+        "stream": False,
+        "messages": messages,
+    }
+    req = request.Request(
+        f"{base_url.rstrip('/')}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=timeout_seconds) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except (error.URLError, error.HTTPError, TimeoutError, json.JSONDecodeError, ValueError):
+        return ""
+
+    message = body.get("message", {})
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    return str(content).strip()
+
+
+def _build_ai_summary_payload(summary_type: str, user_role: str, records: list[dict], focus: str = "all", patient_name: str = "") -> dict:
+    if summary_type == "appointments":
+        items = []
+        for record in records[:6]:
+            if user_role == "Doctor":
+                items.append(
+                    {
+                        "date": record.get("date", ""),
+                        "time": record.get("time", ""),
+                        "patient_name": record.get("patient_name", "Unknown Patient"),
+                    }
+                )
+            else:
+                items.append(
+                    {
+                        "date": record.get("date", ""),
+                        "time": record.get("time", ""),
+                        "doctor_name": record.get("doctor_name", "Unknown"),
+                        "speciality": record.get("speciality", "General"),
+                    }
+                )
+        return {
+            "summary_type": summary_type,
+            "user_role": user_role,
+            "focus": focus,
+            "record_count": len(records),
+            "records": items,
+        }
+
+    items = []
+    for record in records[:5]:
+        medicines = []
+        for med in record.get("medicines", [])[:5]:
+            if not isinstance(med, dict):
+                continue
+            name = (med.get("name") or "").strip()
+            if not name:
+                continue
+            medicines.append(
+                {
+                    "name": name,
+                    "dosage": (med.get("dosage") or "").strip(),
+                    "frequency": (med.get("frequency") or "").strip(),
+                    "days": med.get("days"),
+                    "timing": (med.get("timing") or "").strip(),
+                }
+            )
+        items.append(
+            {
+                "created_at": (record.get("created_at") or "").strip(),
+                "diagnosis": (record.get("diagnosis") or "Not specified").strip() or "Not specified",
+                "doctor_name": (record.get("doctor_name") or record.get("doctor_email") or "").strip(),
+                "follow_up_days": record.get("follow_up_days"),
+                "medicines": medicines,
+            }
+        )
+    return {
+        "summary_type": summary_type,
+        "user_role": user_role,
+        "patient_name": patient_name,
+        "record_count": len(records),
+        "records": items,
+    }
+
+
+def _generate_dashboard_ai_summary(summary_type: str, user_role: str, records: list[dict], focus: str = "all", patient_name: str = "") -> str:
+    if not records:
+        return ""
+
+    payload = _build_ai_summary_payload(summary_type, user_role, records, focus=focus, patient_name=patient_name)
+    subject = patient_name.strip() if patient_name else ("the patient" if user_role == "Doctor" else "the user")
+    system_prompt = (
+        "You are MedMinder Assistant. Write concise, grounded medical admin summaries only from provided structured data. "
+        "Do not diagnose, invent, or add facts. Mention uncertainty briefly when data is missing."
+    )
+    user_prompt = (
+        f"Create a clean {summary_type} summary for {subject}. "
+        "Use 2 to 5 short bullet points. Keep dates exactly as provided. "
+        "Do not recommend new treatment or speculate beyond the records.\n\n"
+        f"Structured data:\n{json.dumps(payload, ensure_ascii=True)}"
+    )
+    reply = _call_ollama_chat(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+    )
+    return reply.strip()
+
+
 def _build_patient_appointment_summary(user_email: str, focus: str = "all") -> str:
     upcoming = get_appointments_for_patient(user_email) if focus in ("all", "upcoming") else []
     past = get_past_appointments_for_patient(user_email) if focus in ("all", "past") else []
@@ -1803,7 +1947,28 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
 
     if asks_history:
         if user_role == "Doctor":
+            records = (
+                get_past_appointments_for_doctor(user_email)
+                if appointment_focus == "past"
+                else get_appointments_for_doctor(user_email)
+                if appointment_focus == "upcoming"
+                else get_appointments_for_doctor(user_email) + get_past_appointments_for_doctor(user_email)
+            )
+            ai_summary = _generate_dashboard_ai_summary("appointments", user_role, records, focus=appointment_focus)
+            if ai_summary:
+                return ai_summary, []
             return _build_doctor_appointment_summary(user_email, focus=appointment_focus), []
+
+        records = (
+            get_past_appointments_for_patient(user_email)
+            if appointment_focus == "past"
+            else get_appointments_for_patient(user_email)
+            if appointment_focus == "upcoming"
+            else get_appointments_for_patient(user_email) + get_past_appointments_for_patient(user_email)
+        )
+        ai_summary = _generate_dashboard_ai_summary("appointments", user_role, records, focus=appointment_focus)
+        if ai_summary:
+            return ai_summary, []
         return _build_patient_appointment_summary(user_email, focus=appointment_focus), []
 
     if asks_prescription_followup:
@@ -1826,6 +1991,9 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
             prescriptions = get_prescriptions_for_patient(user_email)
             state["last_prescriptions"] = prescriptions
             state["last_prescription_patient"] = {"name": "you", "email": user_email}
+            ai_summary = _generate_dashboard_ai_summary("prescriptions", user_role, prescriptions, patient_name="you")
+            if ai_summary:
+                return ai_summary, []
             return _build_patient_prescription_summary(user_email), []
         patient = _find_doctor_patient_match(user_email, text)
         if not patient:
@@ -1837,7 +2005,11 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
             "name": patient.get("name", ""),
             "email": patient.get("email", ""),
         }
-        return _build_doctor_patient_prescription_summary(patient.get("name", ""), prescriptions), []
+        patient_name = patient.get("name", "")
+        ai_summary = _generate_dashboard_ai_summary("prescriptions", user_role, prescriptions, patient_name=patient_name)
+        if ai_summary:
+            return ai_summary, []
+        return _build_doctor_patient_prescription_summary(patient_name, prescriptions), []
 
     if asks_doctor_recommendation:
         if user_role == "Doctor":
