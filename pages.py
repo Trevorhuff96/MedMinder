@@ -1174,6 +1174,22 @@ def appointments_page():
 
     quick_slots.sort(key=lambda item: item["event_start"])
 
+    confirm_request_key = f"confirm_appointment_{user_email}_{viewed_doc.get('email', 'doctor')}"
+    confirm_checkbox_key = f"{confirm_request_key}_checked"
+
+    def request_appointment_confirmation(event_start, source_label=""):
+        try:
+            date_obj = datetime.fromisoformat(event_start.replace("Z", "+00:00"))
+            formatted_date = date_obj.strftime("%B %d, %Y at %I:%M %p")
+            st.session_state[confirm_request_key] = {
+                "event_start": event_start,
+                "formatted_date": formatted_date,
+                "source": source_label,
+            }
+            st.session_state[confirm_checkbox_key] = False
+        except ValueError:
+            st.error("Invalid appointment time format. Please try again.")
+
     def process_appointment_booking(event_start):
         # Create unique key for this appointment booking to prevent duplicates
         appt_key = f"{user_email}_{viewed_doc.get('email')}_{event_start}"
@@ -1216,6 +1232,42 @@ def appointments_page():
         except ValueError:
             st.error("Invalid appointment time format. Please try again.")
 
+    if hasattr(st, "dialog"):
+        @st.dialog("Confirm Appointment")
+        def show_appointment_confirmation_dialog():
+            confirm_request = st.session_state.get(confirm_request_key)
+            if not confirm_request:
+                return
+
+            source_label = confirm_request.get("source", "")
+            source_text = f" via {source_label}" if source_label else ""
+            st.write(
+                f"You selected **{confirm_request.get('formatted_date', 'this appointment time')}**{source_text}."
+            )
+            st.write("Please verify before booking.")
+
+            confirmed = st.checkbox(
+                "I verify this is the appointment time I want to book.",
+                key=confirm_checkbox_key,
+            )
+
+            confirm_col, cancel_col = st.columns(2)
+            with confirm_col:
+                if st.button("Confirm and Book", type="primary", use_container_width=True):
+                    if confirmed:
+                        event_start = confirm_request.get("event_start", "")
+                        st.session_state.pop(confirm_request_key, None)
+                        st.session_state.pop(confirm_checkbox_key, None)
+                        process_appointment_booking(event_start)
+                    else:
+                        st.warning("Please check the confirmation box before booking.")
+
+            with cancel_col:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.pop(confirm_request_key, None)
+                    st.session_state.pop(confirm_checkbox_key, None)
+                    st.rerun()
+
     st.markdown("<p class='appointment-step-title'>Step 2: Book Your Appointment</p>", unsafe_allow_html=True)
     
     if quick_slots:
@@ -1249,7 +1301,7 @@ def appointments_page():
             )
 
         if st.button("✅ Book Now", type="primary", key=f"quick_book_btn_{viewed_doc.get('email', 'doctor')}", use_container_width=True):
-            process_appointment_booking(selected_event_start)
+            request_appointment_confirmation(selected_event_start, "Quick Book")
         
         st.markdown("<hr class='appointment-divider' />", unsafe_allow_html=True)
         st.markdown("<p class='appointment-calendar-title'>📅 Calendar View</p>", unsafe_allow_html=True)
@@ -1274,7 +1326,13 @@ def appointments_page():
     if cal_result and cal_result.get("callback") == "eventClick":
         event_start = cal_result.get("eventClick", {}).get("event", {}).get("start", "")
         if event_start:
-            process_appointment_booking(event_start)
+            request_appointment_confirmation(event_start, "Calendar")
+
+    if st.session_state.get(confirm_request_key):
+        if hasattr(st, "dialog"):
+            show_appointment_confirmation_dialog()
+        else:
+            st.warning("Your Streamlit version does not support modal dialogs. Please update Streamlit to use popup confirmation.")
 
     # Floating chatbot launcher for patient appointments page.
     # Keep it hidden while the side menu is open so it does not block menu clicks.
