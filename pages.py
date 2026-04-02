@@ -1730,21 +1730,29 @@ def _generate_dashboard_assistant_reply(user_role: str, user_email: str, user_te
         return "Tell me your symptoms and I can recommend doctors first, then send you to booking.", []
 
     if asks_cancel:
-        if user_role != "Patient":
-            return "Only patients can cancel their own appointments from chat.", []
+        if user_role == "Doctor":
+            upcoming = get_appointments_for_doctor(user_email)
+        else:
+            upcoming = get_appointments_for_patient(user_email)
 
-        upcoming = get_appointments_for_patient(user_email)
         if not upcoming:
             state["pending_cancellable_appointments"] = []
+            if user_role == "Doctor":
+                return "You have no upcoming patient appointments to cancel.", []
             return "You have no upcoming appointments to cancel.", []
 
         cancellable = upcoming[:5]
         state["pending_cancellable_appointments"] = cancellable
         lines = ["Select an appointment below and I will cancel it for you:"]
         for appt in cancellable:
-            lines.append(
-                f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')}"
-            )
+            if user_role == "Doctor":
+                lines.append(
+                    f"- {appt.get('date')} at {appt.get('time')} with {appt.get('patient_name', 'Unknown Patient')}"
+                )
+            else:
+                lines.append(
+                    f"- {appt.get('date')} at {appt.get('time')} with Dr. {appt.get('doctor_name', 'Unknown')}"
+                )
         return "\n".join(lines), []
 
     if asks_history:
@@ -1952,8 +1960,12 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
                     appt_id = appt.get("appointment_id")
                     appt_date = appt.get("date", "")
                     appt_time = appt.get("time", "")
-                    doctor_name = appt.get("doctor_name", "Unknown")
-                    cancel_label = f"Cancel {appt_date} {appt_time} with Dr. {doctor_name}"
+                    if user_role == "Doctor":
+                        patient_name = appt.get("patient_name", "Unknown Patient")
+                        cancel_label = f"Cancel {appt_date} {appt_time} with {patient_name}"
+                    else:
+                        doctor_name = appt.get("doctor_name", "Unknown")
+                        cancel_label = f"Cancel {appt_date} {appt_time} with Dr. {doctor_name}"
                     cancel_key = f"dashboard_chat_cancel_{msg_idx}_{appt_idx}_{appt_id}"
 
                     if st.button(cancel_label, key=cancel_key, use_container_width=True):
@@ -1965,7 +1977,11 @@ def render_dashboard_assistant_tab(user_role: str, user_email: str) -> None:
                             state["messages"].append(
                                 {
                                     "role": "assistant",
-                                    "content": f"I cancelled your appointment on {appt_date} at {appt_time} with Dr. {doctor_name}.",
+                                    "content": (
+                                        f"I cancelled the appointment on {appt_date} at {appt_time} with {patient_name}."
+                                        if user_role == "Doctor"
+                                        else f"I cancelled your appointment on {appt_date} at {appt_time} with Dr. {doctor_name}."
+                                    ),
                                 }
                             )
                         else:
