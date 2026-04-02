@@ -705,6 +705,37 @@ def test_dashboard_assistant_returns_past_patient_appointments(monkeypatch):
     assert recommended == []
 
 
+def test_dashboard_assistant_uses_ai_summary_for_patient_appointments(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_appointments_for_patient",
+        lambda _email: [
+            {
+                "date": "2026-03-20",
+                "time": "09:30",
+                "doctor_name": "Alex Carter",
+                "speciality": "Dentist",
+            }
+        ],
+    )
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "_generate_dashboard_ai_summary",
+        lambda summary_type, user_role, records, **kwargs: "AI summary: 1 upcoming appointment with Dr. Alex Carter.",
+    )
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Show my upcoming appointments",
+        {},
+    )
+
+    assert reply == "AI summary: 1 upcoming appointment with Dr. Alex Carter."
+    assert recommended == []
+
+
 def test_build_patient_appointment_summary_combines_upcoming_and_past(monkeypatch):
     monkeypatch.setattr(
         pages,
@@ -793,6 +824,38 @@ def test_dashboard_assistant_lists_prescriptions_for_patient(monkeypatch):
     assert recommended == []
 
 
+def test_dashboard_assistant_uses_ai_summary_for_patient_prescriptions(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Seasonal allergies",
+                "doctor_name": "Taylor Nguyen",
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Cetirizine"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        pages,
+        "_generate_dashboard_ai_summary",
+        lambda summary_type, user_role, records, **kwargs: "AI summary: latest prescription highlights.",
+    )
+
+    state = {}
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Can you show my prescriptions?",
+        state,
+    )
+
+    assert reply == "AI summary: latest prescription highlights."
+    assert recommended == []
+    assert len(state["last_prescriptions"]) == 1
+
+
 def test_dashboard_assistant_summarizes_multiple_prescriptions_for_patient(monkeypatch):
     monkeypatch.setattr(
         pages,
@@ -828,6 +891,69 @@ def test_dashboard_assistant_summarizes_multiple_prescriptions_for_patient(monke
     assert "Diagnoses on record: Migraine, Sinusitis" in reply
     assert "Medicines mentioned: Sumatriptan, Amoxicillin, Cetirizine" in reply
     assert recommended == []
+
+
+def test_dashboard_assistant_falls_back_when_ai_summary_missing_for_patient_prescriptions(monkeypatch):
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Seasonal allergies",
+                "doctor_name": "Taylor Nguyen",
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Cetirizine"}, {"name": "Fluticasone"}],
+            }
+        ],
+    )
+    monkeypatch.setattr(pages, "_generate_dashboard_ai_summary", lambda *args, **kwargs: "")
+
+    reply, recommended = pages._generate_dashboard_assistant_reply(
+        "Patient",
+        "patient@example.com",
+        "Can you show my prescriptions?",
+        {},
+    )
+
+    assert "I found 1 prescription on file." in reply
+    assert "Cetirizine, Fluticasone" in reply
+    assert recommended == []
+
+
+def test_build_ai_summary_payload_for_doctor_prescriptions_limits_and_sanitizes_records():
+    payload = pages._build_ai_summary_payload(
+        "prescriptions",
+        "Doctor",
+        [
+            {
+                "created_at": "2026-03-10T09:00:00",
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "follow_up_days": 14,
+                "medicines": [
+                    {"name": "Sumatriptan", "dosage": "50 mg", "frequency": "Once daily", "days": 5, "timing": "Morning"},
+                    {"name": "", "dosage": "ignored"},
+                    "invalid",
+                ],
+            }
+        ],
+        patient_name="Jamie Patient",
+    )
+
+    assert payload["summary_type"] == "prescriptions"
+    assert payload["user_role"] == "Doctor"
+    assert payload["patient_name"] == "Jamie Patient"
+    assert payload["record_count"] == 1
+    assert payload["records"][0]["diagnosis"] == "Migraine"
+    assert payload["records"][0]["medicines"] == [
+        {
+            "name": "Sumatriptan",
+            "dosage": "50 mg",
+            "frequency": "Once daily",
+            "days": 5,
+            "timing": "Morning",
+        }
+    ]
 
 
 def test_find_doctor_patient_match_uses_unique_token_match(monkeypatch):
@@ -1206,15 +1332,27 @@ def test_dashboard_assistant_cancel_intent_populates_cancellable_appointments(mo
     assert recommended == []
 
 
-def test_dashboard_assistant_cancel_intent_for_doctor_is_rejected():
+def test_dashboard_assistant_cancel_intent_for_doctor_lists_upcoming_appointments(monkeypatch):
+    upcoming = [
+        {
+            "appointment_id": 303,
+            "date": "2026-03-22",
+            "time": "11:00",
+            "patient_name": "Jordan Lee",
+        }
+    ]
+    monkeypatch.setattr(pages, "get_appointments_for_doctor", lambda _email: upcoming)
+
+    state = {}
     reply, recommended = pages._generate_dashboard_assistant_reply(
         "Doctor",
         "doctor@example.com",
         "cancel appointment",
-        {},
+        state,
     )
 
-    assert "Only patients can cancel" in reply
+    assert "Select an appointment below" in reply
+    assert state.get("pending_cancellable_appointments") == upcoming
     assert recommended == []
 
 
