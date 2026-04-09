@@ -167,7 +167,7 @@ Based on the current code, the strongest defensible claims are:
 - Patients and doctors can sign up and log in and invalid email and passwords are checked. 
   ![Patient and doctor login flow](images/login.png)
 - Patients can book and cancel appointments.
-    ![Book](images/book and cancel.png)
+    ![Book](images/book%20and%20cancel.png)
     ![Cancel Banner](images/cancel_banner.png)
 - Doctors can cancel appointments.
 - Patients can view prescriptions associated with their account.
