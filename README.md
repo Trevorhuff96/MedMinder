@@ -170,9 +170,12 @@ Based on the current code, the strongest defensible claims are:
     ![Book](images/book%20and%20cancel.png)
     ![Cancel Banner](images/cancel_banner.png)
 - Doctors can cancel appointments.
+    ![Doctor Cancel](images/doc_cancel.png)
 - Patients can view prescriptions associated with their account.
 - Doctors can view patient rosters derived from care-team links.
 - Patients can see a consolidated treatment-summary view assembled from multiple providers' prescription history and care-team records.
+    ![Summary UI](images/summary_ui.png)
+    ![Summary Test](images/summary_test.png)
 - The chatbot can help route users to booking flows, summarize appointments, summarize prescriptions, and suggest doctors by speciality.
 
 ## Where Limitations Remain
