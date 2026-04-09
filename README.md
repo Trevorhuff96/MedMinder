@@ -179,7 +179,12 @@ Based on the current code, the strongest defensible claims are:
     ![Summary UI](images/summary_ui.png)
     ![Summary Test](images/summary_test.png)
 - The chatbot can help route users to booking flows, summarize appointments, summarize prescriptions, and suggest doctors by speciality.
-    ![AI chat bot booking flow and doctor recommendation](images/AI chat bot booking flow and doctor recommendation.png)
+    **Booking flows and Doctor Recommendation**
+    ![AI Chatbot Booking and Doctor Recommendation Flow](images/AI%20chat%20bot%20booking%20flow%20and%20doctor%20recommendation.png)
+    ![AI Navigated Booking](images/AI%20navigated%20booking%20flow.png)
+    **INSERT APPOINTMENT SUMMARIZATION PHOTO**
+    **Prescription Summarization**
+    ![AI Prescription Summarization](images/AI%20chat%20bot%20summarize%20prescriptions.png)
 ## Where Limitations Remain
 
 This is the most important section for trust. Several planned safeguards are not yet implemented, and some current controls are prototype-grade only.
