@@ -165,6 +165,7 @@ A few trust-oriented transparency choices are already visible:
 Based on the current code and the repository's trust-claims document, the strongest defensible claims are:
 
 - Patients and doctors can sign up and log in.
+  ![Patient and doctor login flow](images/login.png)
 - Patients can book and cancel appointments.
 - Doctors can cancel appointments.
 - Patients can view prescriptions associated with their account.
