@@ -121,7 +121,7 @@ The code enforces a few important data boundaries:
 
 - Doctors see linked patients through the `care_team` relationship.
 - A patient is linked to a doctor when an appointment is successfully created.
-- If the last confirmed appointment between a patient and doctor is cancelled, the care-team link is removed.
+- If the last confirmed appointment between a patient and doctor is cancelled and the patient and doctor do not have any previous appointments together, the care-team link is removed.
 - Doctor-specific prescription lookups are scoped to prescriptions that doctor wrote for the selected patient.
 
 These rules are a direct attempt to satisfy the trust claim that doctors should not freely browse unrelated patient data.
