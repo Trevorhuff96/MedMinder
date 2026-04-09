@@ -162,11 +162,13 @@ A few trust-oriented transparency choices are already visible:
 
 ## What The System Can Credibly Claim Today
 
-Based on the current code and the repository's trust-claims document, the strongest defensible claims are:
+Based on the current code, the strongest defensible claims are:
 
-- Patients and doctors can sign up and log in.
+- Patients and doctors can sign up and log in and invalid email and passwords are checked. 
   ![Patient and doctor login flow](images/login.png)
 - Patients can book and cancel appointments.
+    ![Book](images/book and cancel.png)
+    ![Cancel Banner](images/cancel_banner.png)
 - Doctors can cancel appointments.
 - Patients can view prescriptions associated with their account.
 - Doctors can view patient rosters derived from care-team links.
