@@ -171,7 +171,8 @@ Based on the current code, the strongest defensible claims are:
     ![Cancel Banner](images/cancel_banner.png)
 - Doctors can cancel appointments.
     ![Doctor Cancel](images/doc_cancel.png)
-- Patients can view prescriptions associated with their account.
+- Doctors can prescribe medicines for their patients.
+- Patients can view prescriptions associated with their account and filter them.
     ![Prescription UI](images/prescription_ui.png)
 - Doctors can view patient rosters derived from care-team links.
 - Patients can see a consolidated treatment-summary view assembled from multiple providers' prescription history and care-team records.

@@ -394,6 +394,123 @@ def test_patient_dashboard_page_shows_doctor_notes(monkeypatch):
     assert any("Please arrive 10 minutes early" in item for item in st_stub.markdowns)
 
 
+def test_patient_dashboard_page_filters_active_prescriptions_tab(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_email": "patient@example.com", "user_name": "Jamie", "user_role": "Patient", "menu_open": False}
+        ),
+        select_values={
+            "patient_filter_diagnosis": "Migraine",
+            "patient_filter_medicine": "All",
+            "patient_filter_doctor": "All",
+        },
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_cancelled_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "general_notes": "Hydrate and rest",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan", "dosage": "50 mg", "frequency": "Once daily", "days": 5, "directions": "After meals"}],
+            },
+            {
+                "diagnosis": "Sinusitis",
+                "doctor_name": "Alex Carter",
+                "general_notes": "Steam inhalation",
+                "follow_up_days": 7,
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Amoxicillin", "dosage": "500 mg", "frequency": "Twice daily", "days": 7, "directions": "With food"}],
+            },
+        ],
+    )
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_care_team_for_patient",
+        lambda _email: [{"name": "Taylor Nguyen", "email": "taylor@example.com", "speciality": "Neurologist"}],
+    )
+    monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+
+    pages.patient_dashboard_page()
+
+    prescription_cards = "\n".join(item for item in st_stub.markdowns if "patient-rx-card" in item)
+
+    assert "Active Prescriptions" in st_stub.subheaders
+    assert "Migraine" in prescription_cards
+    assert "Sumatriptan" in prescription_cards
+    assert "Hydrate and rest" in prescription_cards
+    assert "Sinusitis" not in prescription_cards
+    assert "Amoxicillin" not in prescription_cards
+
+
+def test_patient_dashboard_page_shows_empty_state_when_prescription_filters_do_not_match(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {"user_email": "patient@example.com", "user_name": "Jamie", "user_role": "Patient", "menu_open": False}
+        ),
+        select_values={
+            "patient_filter_diagnosis": "All",
+            "patient_filter_medicine": "Ibuprofen",
+            "patient_filter_doctor": "All",
+        },
+    )
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "get_cancelled_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_prescriptions_for_patient",
+        lambda _email: [
+            {
+                "diagnosis": "Migraine",
+                "doctor_name": "Taylor Nguyen",
+                "general_notes": "Hydrate and rest",
+                "follow_up_days": 14,
+                "created_at": "2026-03-10T09:00:00",
+                "medicines": [{"name": "Sumatriptan", "dosage": "50 mg", "frequency": "Once daily", "days": 5, "directions": "After meals"}],
+            },
+            {
+                "diagnosis": "Sinusitis",
+                "doctor_name": "Alex Carter",
+                "general_notes": "Steam inhalation",
+                "follow_up_days": 7,
+                "created_at": "2026-02-01T10:30:00",
+                "medicines": [{"name": "Amoxicillin", "dosage": "500 mg", "frequency": "Twice daily", "days": 7, "directions": "With food"}],
+            },
+        ],
+    )
+    monkeypatch.setattr(pages, "get_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(pages, "get_past_appointments_for_patient", lambda _email: [])
+    monkeypatch.setattr(
+        pages,
+        "get_care_team_for_patient",
+        lambda _email: [{"name": "Taylor Nguyen", "email": "taylor@example.com", "speciality": "Neurologist"}],
+    )
+    monkeypatch.setattr(pages, "render_dashboard_assistant_tab", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(pages, "render_floating_chatbot", lambda *_args, **_kwargs: None)
+
+    pages.patient_dashboard_page()
+
+    prescription_cards = "\n".join(item for item in st_stub.markdowns if "patient-rx-card" in item)
+
+    assert "No prescriptions match the selected filters." in st_stub.infos
+    assert "Migraine" not in prescription_cards
+    assert "Sinusitis" not in prescription_cards
+
+
 def test_profile_edit_page_doctor_updates_professional_fields(monkeypatch):
     st_stub = StreamlitPageStub(
         session_state=SessionStateStub(
