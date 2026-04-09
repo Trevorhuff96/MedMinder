@@ -91,12 +91,12 @@ The current app uses AI in narrower, more controlled ways:
 - The floating chatbot can call a local Ollama model through `OLLAMA_BASE_URL` and `OLLAMA_MODEL`.
 - The chatbot uses a constrained system prompt that explicitly tells the model not to diagnose.
 - Doctor recommendation starts with deterministic symptom-to-speciality keyword matching and only uses the LLM as a fallback.
-- Prescription and appointment summaries shown by the dashboard assistant are grounded in structured database retrieval and can be rewritten into concise AI summaries when Ollama is configured, with deterministic fallbacks when it is not.
+- The dashboard assistant can generate Ollama-backed appointment and prescription summaries from structured records, with deterministic fallbacks when Ollama is unavailable.
 - The patient treatment summary is labeled `AI-Generated`, but in code it is actually a deterministic aggregate built from stored prescriptions and care-team data.
 
 This means the "AI" in MedMinder is currently a hybrid:
 
-- true LLM use for conversational replies and speciality fallback
+- true LLM use for conversational replies, speciality fallback, and dashboard summary rewriting
 - non-LLM computed summaries for several trust-sensitive views
 
 That hybrid approach reduces risk compared with letting the model invent medical state from scratch.
@@ -178,8 +178,6 @@ This is the most important section for trust. Several planned safeguards are not
 
 ### Security and identity limitations
 
-- Passwords use unsalted `SHA-256`, which is better than plain text but not appropriate for production compared with `bcrypt` or `argon2`.
-- Legacy `MD5` password verification is still supported for migration compatibility.
 - There is no forgot-password flow.
 - There is no email verification.
 - There is no multi-factor authentication.
