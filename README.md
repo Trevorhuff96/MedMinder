@@ -171,7 +171,10 @@ Based on the current code, the strongest defensible claims are:
     ![Cancel Banner](images/cancel_banner.png)
 - Doctors can cancel appointments.
     ![Doctor Cancel](images/doc_cancel.png)
-- Doctors can prescribe medicines for their patients.
+- Doctors can prescribe medicines and notes for their patients.
+    ![Prescribe button](images/prescribe_button.png)
+    ![Create Prescription](images/create_prescription.png)
+    ![Doctor Note](images/add_note.png)
 - Patients can view prescriptions associated with their account and filter them.
     ![Prescription UI](images/prescription_ui.png)
 - Doctors can view patient rosters derived from care-team links.
@@ -185,6 +188,7 @@ Based on the current code, the strongest defensible claims are:
     **INSERT APPOINTMENT SUMMARIZATION PHOTO**
     **Prescription Summarization**
     ![AI Prescription Summarization](images/AI%20chat%20bot%20summarize%20prescriptions.png)
+
 ## Where Limitations Remain
 
 This is the most important section for trust. Several planned safeguards are not yet implemented, and some current controls are prototype-grade only.
@@ -275,6 +279,45 @@ Playwright smoke tests:
 ```bash
 npm test
 ```
+
+### Test Coverage and Reports
+
+The project uses two complementary test layers:
+
+- `pytest` in [`test_app.py`](/Users/achakr13/Documents/GitHub/MedMinder/test_app.py) covers Python application logic, including authentication rules, profile updates, signup validation, appointment and cancellation behavior, prescription retrieval and summaries, treatment-summary helpers, assistant intent routing, and required documentation checks.
+- Playwright in [`core-flows.spec.ts`](/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts) and [`seed.spec.ts`](/Users/achakr13/Documents/GitHub/MedMinder/seed.spec.ts) covers end-to-end browser flows such as patient signup, patient login, appointment visibility, doctor prescription creation, doctor note entry for past appointments, and patient treatment-summary rendering.
+
+Current `pytest` coverage from `pytest --cov=. --cov-report=term-missing` on `2026-04-10`:
+
+- Total Python statement coverage: `62%`
+- [`ui_components.py`](/Users/achakr13/Documents/GitHub/MedMinder/ui_components.py): `93%`
+- [`appointments.py`](/Users/achakr13/Documents/GitHub/MedMinder/appointments.py): `67%`
+- [`auth.py`](/Users/achakr13/Documents/GitHub/MedMinder/auth.py): `63%`
+- [`prescription.py`](/Users/achakr13/Documents/GitHub/MedMinder/prescription.py): `61%`
+- [`pages.py`](/Users/achakr13/Documents/GitHub/MedMinder/pages.py): `51%`
+
+The lowest percentage is in [`pages.py`](/Users/achakr13/Documents/GitHub/MedMinder/pages.py), which is also the largest file and contains most of the Streamlit UI rendering paths, page orchestration, and interactive dashboard logic.
+
+Playwright is configured in [`playwright.config.ts`](/Users/achakr13/Documents/GitHub/MedMinder/playwright.config.ts) to start the Streamlit app automatically and run a custom reporter defined in [`playwright-detailed-reporter.cjs`](/Users/achakr13/Documents/GitHub/MedMinder/playwright-detailed-reporter.cjs).
+
+### GitHub Actions Flow
+
+The GitHub Actions workflow in [`.github/workflows/basic_action.yml`](/Users/achakr13/Documents/GitHub/MedMinder/.github/workflows/basic_action.yml) provides the CI baseline for these tests. It:
+
+- runs on pushes to `main` affecting Python files or files under `docs/`
+- runs on pull requests targeting `main`
+- supports manual execution through `workflow_dispatch`
+- installs Python `3.11` and dependencies from `requirements.txt`
+- runs `pytest` in CI
+- detects documentation-only changes under `docs/`
+- opens a GitHub issue notification when tracked documentation files change on `main`
+
+Generated Playwright reports are written to:
+
+- [`playwright-report-data/detailed-report.md`](/Users/achakr13/Documents/GitHub/MedMinder/playwright-report-data/detailed-report.md): human-readable markdown summary with totals, per-test results, locations, durations, and failure details when present
+- [`playwright-report-data/detailed-report.json`](/Users/achakr13/Documents/GitHub/MedMinder/playwright-report-data/detailed-report.json): machine-readable JSON report with timestamps, overall status, pass/fail counts, retries, durations, and per-test metadata
+
+Together, these tests provide both fast logic-level regression checks through `pytest` and full UI workflow validation through Playwright, while the report files preserve test evidence in formats suited for both manual review and automation.
 
 ## Final Assessment
 
