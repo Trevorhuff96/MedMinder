@@ -1,0 +1,131 @@
+{
+  "generatedAt": "2026-04-10T04:49:58.016Z",
+  "startedAt": "2026-04-10T04:49:33.374Z",
+  "durationMs": 24642,
+  "overallStatus": "passed",
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "untested": 0,
+  "tests": [
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > signs up a new patient and can log in",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:35:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "signs up a new patient and can log in"
+      ],
+      "title": "signs up a new patient and can log in",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 3332,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > logs in as a seeded patient",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:68:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "logs in as a seeded patient"
+      ],
+      "title": "logs in as a seeded patient",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 2298,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > shows a patient booked appointments in the scheduler",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:79:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "shows a patient booked appointments in the scheduler"
+      ],
+      "title": "shows a patient booked appointments in the scheduler",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 4823,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > lets a doctor create a prescription for a linked patient",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:121:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "lets a doctor create a prescription for a linked patient"
+      ],
+      "title": "lets a doctor create a prescription for a linked patient",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 3026,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > lets a doctor add notes to a past appointment",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:159:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "lets a doctor add notes to a past appointment"
+      ],
+      "title": "lets a doctor add notes to a past appointment",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 2993,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "core-flows.spec.ts > Core MedMinder flows > shows treatment summaries with prescriptions and doctor notes",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/core-flows.spec.ts:196:7",
+      "titlePath": [
+        "core-flows.spec.ts",
+        "Core MedMinder flows",
+        "shows treatment summaries with prescriptions and doctor notes"
+      ],
+      "title": "shows treatment summaries with prescriptions and doctor notes",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 2588,
+      "retry": 0,
+      "error": ""
+    },
+    {
+      "id": "seed.spec.ts > Authentication > logs in as a patient",
+      "file": "/Users/achakr13/Documents/GitHub/MedMinder/seed.spec.ts",
+      "location": "/Users/achakr13/Documents/GitHub/MedMinder/seed.spec.ts:4:7",
+      "titlePath": [
+        "seed.spec.ts",
+        "Authentication",
+        "logs in as a patient"
+      ],
+      "title": "logs in as a patient",
+      "outcome": "passed",
+      "status": "passed",
+      "expectedStatus": "passed",
+      "durationMs": 2218,
+      "retry": 0,
+      "error": ""
+    }
+  ]
+}

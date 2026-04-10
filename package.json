@@ -9,6 +9,7 @@
   "scripts": {
     "test": "playwright test",
     "test:e2e": "playwright test",
+    "test:e2e:report": "playwright test && echo \"Detailed report: playwright-report-data/detailed-report.md\"",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug"
   },

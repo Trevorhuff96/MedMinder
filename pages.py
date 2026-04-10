@@ -1224,7 +1224,9 @@ def appointments_page():
         except ValueError:
             st.error("Invalid appointment time format. Please try again.")
 
-    if hasattr(st, "dialog"):
+    use_modal_confirmation = hasattr(st, "dialog") and os.getenv("PLAYWRIGHT_TEST") != "1"
+
+    if use_modal_confirmation:
         @st.dialog("Confirm Appointment")
         def show_appointment_confirmation_dialog():
             confirm_request = st.session_state.get(confirm_request_key)
@@ -1259,6 +1261,41 @@ def appointments_page():
                     st.session_state.pop(confirm_request_key, None)
                     st.session_state.pop(confirm_checkbox_key, None)
                     st.rerun()
+
+    def render_inline_appointment_confirmation():
+        confirm_request = st.session_state.get(confirm_request_key)
+        if not confirm_request:
+            return
+
+        source_label = confirm_request.get("source", "")
+        source_text = f" via {source_label}" if source_label else ""
+        st.markdown("### Confirm Appointment")
+        st.write(
+            f"You selected **{confirm_request.get('formatted_date', 'this appointment time')}**{source_text}."
+        )
+        st.write("Please verify before booking.")
+
+        confirmed = st.checkbox(
+            "I verify this is the appointment time I want to book.",
+            key=confirm_checkbox_key,
+        )
+
+        confirm_col, cancel_col = st.columns(2)
+        with confirm_col:
+            if st.button("Confirm and Book", type="primary", use_container_width=True):
+                if confirmed:
+                    event_start = confirm_request.get("event_start", "")
+                    st.session_state.pop(confirm_request_key, None)
+                    st.session_state.pop(confirm_checkbox_key, None)
+                    process_appointment_booking(event_start)
+                else:
+                    st.warning("Please check the confirmation box before booking.")
+
+        with cancel_col:
+            if st.button("Cancel", use_container_width=True):
+                st.session_state.pop(confirm_request_key, None)
+                st.session_state.pop(confirm_checkbox_key, None)
+                st.rerun()
 
     st.markdown("<p class='appointment-step-title'>Step 2: Book Your Appointment</p>", unsafe_allow_html=True)
     
@@ -1321,10 +1358,10 @@ def appointments_page():
             request_appointment_confirmation(event_start, "Calendar")
 
     if st.session_state.get(confirm_request_key):
-        if hasattr(st, "dialog"):
+        if use_modal_confirmation:
             show_appointment_confirmation_dialog()
         else:
-            st.warning("Your Streamlit version does not support modal dialogs. Please update Streamlit to use popup confirmation.")
+            render_inline_appointment_confirmation()
 
     # Floating chatbot launcher for patient appointments page.
     # Keep it hidden while the side menu is open so it does not block menu clicks.

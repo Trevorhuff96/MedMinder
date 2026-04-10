@@ -91,11 +91,17 @@ class StreamlitPageStub:
     def text_area(self, label, value="", key=None, **kwargs):
         return self.input_values.get(key or label, value)
 
+    def number_input(self, label, min_value=None, max_value=None, value=0, key=None, **kwargs):
+        return self.input_values.get(key or label, value)
+
     def form_submit_button(self, label, **kwargs):
         return self.form_submit
 
     def checkbox(self, label, value=False, key=None, **kwargs):
         return self.input_values.get(key or label, value)
+
+    def divider(self):
+        return None
 
     def rerun(self):
         self.rerun_called = True
@@ -568,6 +574,86 @@ def test_profile_edit_page_doctor_updates_professional_fields(monkeypatch):
     assert update_calls["kwargs"]["off_day"] == "Monday"
     assert st_stub.session_state["profile_edit_mode"] is False
     assert st_stub.session_state["user_name"] == "Dr. Taylor Updated"
+    assert st_stub.rerun_called is True
+
+
+def test_prescription_page_submits_doctor_prescription_form(monkeypatch):
+    st_stub = StreamlitPageStub(
+        session_state=SessionStateStub(
+            {
+                "user_email": "doctor@example.com",
+                "user_role": "Doctor",
+                "user_name": "Taylor",
+                "selected_patient": "Jamie Patient",
+                "selected_patient_id": 42,
+                "show_prescription": True,
+                "menu_open": False,
+            }
+        ),
+        input_values={
+            "Diagnosis": "Migraine",
+            "Follow-up in (days)": 21,
+            "General Notes": "Hydrate and rest",
+            "rx_med_name_1": "Sumatriptan",
+            "rx_dosage_1": "50 mg",
+            "rx_days_1": 5,
+            "rx_timing_1": "After meals",
+            "rx_directions_1": "Take one tablet after breakfast.",
+            "rx_med_name_2": "",
+            "rx_dosage_2": "",
+            "rx_days_2": 7,
+            "rx_timing_2": "",
+            "rx_directions_2": "",
+            "rx_med_name_3": "",
+            "rx_dosage_3": "",
+            "rx_days_3": 7,
+            "rx_timing_3": "",
+            "rx_directions_3": "",
+        },
+        select_values={
+            "rx_total_medicines": 3,
+            "rx_frequency_1": "Once daily",
+            "rx_route_1": "Oral",
+            "rx_frequency_2": "Twice daily",
+            "rx_route_2": "Oral",
+            "rx_frequency_3": "Twice daily",
+            "rx_route_3": "Oral",
+        },
+        form_submit=True,
+    )
+
+    saved_payload = {}
+
+    def fake_save_prescription(**kwargs):
+        saved_payload.update(kwargs)
+        return True, "Saved", 101
+
+    monkeypatch.setattr(pages, "st", st_stub)
+    monkeypatch.setattr(pages, "load_custom_styles", lambda: None)
+    monkeypatch.setattr(pages, "init_menu_state", lambda: None)
+    monkeypatch.setattr(pages, "render_side_drawer", lambda: None)
+    monkeypatch.setattr(pages, "save_prescription", fake_save_prescription)
+
+    pages.prescription_page()
+
+    assert saved_payload["patient_name"] == "Jamie Patient"
+    assert saved_payload["patient_id"] == 42
+    assert saved_payload["doctor_email"] == "doctor@example.com"
+    assert saved_payload["diagnosis"] == "Migraine"
+    assert saved_payload["follow_up_days"] == 21
+    assert saved_payload["general_notes"] == "Hydrate and rest"
+    assert saved_payload["medicines"][0] == {
+        "name": "Sumatriptan",
+        "dosage": "50 mg",
+        "frequency": "Once daily",
+        "days": 5,
+        "route": "Oral",
+        "timing": "After meals",
+        "directions": "Take one tablet after breakfast.",
+    }
+    assert st_stub.session_state.prescription_saved_notice == "Prescription saved for Jamie Patient."
+    assert st_stub.session_state.show_prescription is False
+    assert st_stub.session_state.selected_patient_id is None
     assert st_stub.rerun_called is True
 
 
