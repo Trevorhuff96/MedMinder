@@ -217,7 +217,6 @@ This is the most important section for trust. Several planned safeguards are not
 
 ### Scheduling limitations
 
-- The system prevents double-booking for the same doctor/time slot, but a patient can still book the same time with different doctors.
 - Booking confirmation is shown on-screen, but there is no external notification channel such as email or SMS.
 - The chatbot helps users reach booking and cancellation flows, but it is not a fully autonomous scheduler with robust transaction handling.
 - Doctor availability is simplified to office hours and off-day metadata rather than a full editable availability engine.
