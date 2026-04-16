@@ -185,9 +185,9 @@ Based on the current code, the strongest defensible claims are:
     **Booking flows and Doctor Recommendation**
     ![AI Chatbot Booking and Doctor Recommendation Flow](images/AI%20chat%20bot%20booking%20flow%20and%20doctor%20recommendation.png)
     ![AI Navigated Booking](images/AI%20navigated%20booking%20flow.png)
-    **INSERT APPOINTMENT SUMMARIZATION PHOTO**
     **Prescription Summarization**
     ![AI Prescription Summarization](images/AI%20chat%20bot%20summarize%20prescriptions.png)
+    ![AI Apmnt Prescription Summarization](images/prescription_summary.png)
 
 ## Where Limitations Remain
 
